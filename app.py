@@ -7,7 +7,7 @@ import os
 # --- APP CONFIG ---
 st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
 
-# --- CSS FOR PERFECT CENTERING & STYLES ---
+# --- CSS FOR CENTERING & NEON STYLE ---
 st.markdown("""
     <style>
     .centered-header {
@@ -29,6 +29,7 @@ logo_path = "Naboom logo Nuut.png"
 # --- DATABASE CONNECTION ---
 @st.cache_resource
 def get_gspread_client():
+    # Uses the secrets you provided
     s = st.secrets["connections"]["gsheets"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(s, scopes=scopes)
@@ -36,38 +37,44 @@ def get_gspread_client():
 
 def load_data():
     client = get_gspread_client()
-    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    sh = client.open_by_url(url)
+    sheet_id = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    sh = client.open_by_key(sheet_id)
     worksheet = sh.get_worksheet(0)
-    return pd.DataFrame(worksheet.get_all_records())
+    data = worksheet.get_all_records()
+    return pd.DataFrame(data)
 
 def save_data(df):
     client = get_gspread_client()
-    url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-    sh = client.open_by_url(url)
+    sheet_id = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    sh = client.open_by_key(sheet_id)
     worksheet = sh.get_worksheet(0)
     worksheet.clear()
-    df_filled = df.fillna(0).astype(str) 
+    # Fill empty values and convert to string for Google Sheets compatibility
+    df_filled = df.fillna(0).astype(str)
     worksheet.update([df_filled.columns.values.tolist()] + df_filled.values.tolist())
     st.cache_data.clear()
 
-# --- CONSTANTS ---
+# --- TOURNAMENT CONSTANTS ---
 players = ["Bennie", "Adriaan", "Danie", "Martin", "Frederik"]
 hcp_map = {"Bennie": 36, "Adriaan": 33, "Danie": 33, "Martin": 32, "Frederik": 32}
 course_par = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
 course_idx = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
 
-# --- DATA LOADING ---
+# --- LOAD DATA ---
 try:
     df = load_data()
+    # Check if df is empty (first run)
+    if df.empty:
+        raise ValueError("Empty Sheet")
 except Exception:
+    # Initialize default table if sheet is empty or connection fails
     rows = []
     for p in players:
         for h in range(1, 19):
             rows.append({"Player": p, "Hole": h, "Score": 0, "Drinks": 0, "Camo": False, "Throw": False, "Kick": False, "Mully": 0})
     df = pd.DataFrame(rows)
 
-# --- SCORING HELPERS ---
+# --- SCORING CALCULATIONS ---
 def get_allowed_strokes(player, hole_num):
     hcp = hcp_map.get(player, 0)
     idx = course_idx[hole_num - 1]
@@ -80,24 +87,27 @@ def get_points(row):
     strokes = get_allowed_strokes(row['Player'], int(row['Hole']))
     net = int(row['Score']) - strokes
     pts = max(0, 2 - (net - par))
-    return pts * 2 if str(row['Camo']) == "True" else pts
+    # Check if Camo powerup was used
+    is_camo = str(row['Camo']).lower() == "true"
+    return pts * 2 if is_camo else pts
 
-# --- CENTERED UI HEADER ---
+# --- UI HEADER ---
 st.markdown('<div class="centered-header">', unsafe_allow_html=True)
 if os.path.exists(logo_path):
     st.image(logo_path, width=200)
 st.markdown('<p class="main-title">NABOOM NUUT: TACTICAL OPEN</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">Sole Scorekeeper Portal | Tactical Resource Management</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Live Tournament Leaderboard & Tactical Resource Tracker</p>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
+# --- TABS ---
 tab1, tab2, tab3 = st.tabs(["🏆 LEADERBOARD", "🎒 THE ARSENAL", "🎯 HOLE COMMAND"])
 
 with tab1:
     df['Points'] = df.apply(get_points, axis=1)
-    df['Score'] = pd.to_numeric(df['Score'])
-    df['Drinks'] = pd.to_numeric(df['Drinks'])
+    df['Score'] = pd.to_numeric(df['Score'], errors='coerce').fillna(0)
+    df['Drinks'] = pd.to_numeric(df['Drinks'], errors='coerce').fillna(0)
     summary = df.groupby("Player").agg({'Points': 'sum', 'Score': 'sum', 'Drinks': 'sum'}).reset_index()
     summary['Gimme (cm)'] = summary['Drinks'] * 10
     st.dataframe(summary.sort_values("Points", ascending=False), use_container_width=True, hide_index=True)
@@ -109,12 +119,12 @@ with tab2:
         p_data = df[df['Player'] == p]
         arsenal.append({
             "Player": p,
-            "Camo Used": (p_data['Camo'].astype(str) == "True").sum(),
-            "Throws (1-9)": (p_data[p_data['Hole'].astype(int) <= 9]['Throw'].astype(str) == "True").sum(),
-            "Kicks (1-9)": (p_data[p_data['Hole'].astype(int) <= 9]['Kick'].astype(str) == "True").sum(),
-            "Mullies": pd.to_numeric(p_data['Mully']).sum()
+            "Camo Used": (p_data['Camo'].astype(str).str.lower() == "true").sum(),
+            "Throws/Kicks": ((p_data['Throw'].astype(str).str.lower() == "true").sum() + (p_data['Kick'].astype(str).str.lower() == "true").sum()),
+            "Mullies Used": pd.to_numeric(p_data['Mully'], errors='coerce').sum()
         })
     st.table(pd.DataFrame(arsenal))
+    st.info("Powerup Rules: Me2 (1/game) | Throw/Kick (1 per 9 holes) | Mulligans (2 per 18 holes)")
 
 with tab3:
     hole_to_edit = st.selectbox("Select Hole", range(1, 19))
@@ -124,33 +134,26 @@ with tab3:
     with st.form("score_entry_form"):
         temp_df = df.copy()
         for p in players:
-            idx = temp_df[(temp_df['Player'] == p) & (temp_df['Hole'].astype(int) == hole_to_edit)].index[0]
+            # Filter for current player and hole
+            p_mask = (temp_df['Player'] == p) & (temp_df['Hole'].astype(int) == hole_to_edit)
+            idx = temp_df[p_mask].index[0]
             
-            # VISIBLE STROKES
             strokes = get_allowed_strokes(p, hole_to_edit)
-            st.markdown(f"**{p}** <span class='stroke-badge'>Strokes: {strokes}</span>", unsafe_allow_html=True)
+            st.markdown(f"**{p}** <span class='stroke-badge'>Hole Strokes: {strokes}</span>", unsafe_allow_html=True)
             
             c1, c2, c3, c4, c5, c6 = st.columns(6)
             temp_df.at[idx, 'Score'] = c1.number_input("Score", 0, 15, value=int(df.at[idx, 'Score']), key=f"s_{p}_{hole_to_edit}")
             temp_df.at[idx, 'Drinks'] = c2.number_input("Drinks", 0, 10, value=int(df.at[idx, 'Drinks']), key=f"d_{p}_{hole_to_edit}")
-            temp_df.at[idx, 'Camo'] = c3.checkbox("Camo", value=(str(df.at[idx, 'Camo']) == "True"), key=f"c_{p}_{hole_to_edit}")
-            temp_df.at[idx, 'Throw'] = c4.checkbox("Throw", value=(str(df.at[idx, 'Throw']) == "True"), key=f"t_{p}_{hole_to_edit}")
-            temp_df.at[idx, 'Kick'] = c5.checkbox("Kick", value=(str(df.at[idx, 'Kick']) == "True"), key=f"k_{p}_{hole_to_edit}")
+            temp_df.at[idx, 'Camo'] = c3.checkbox("Camo", value=(str(df.at[idx, 'Camo']).lower() == "true"), key=f"c_{p}_{hole_to_edit}")
+            temp_df.at[idx, 'Throw'] = c4.checkbox("Throw", value=(str(df.at[idx, 'Throw']).lower() == "true"), key=f"t_{p}_{hole_to_edit}")
+            temp_df.at[idx, 'Kick'] = c5.checkbox("Kick", value=(str(df.at[idx, 'Kick']).lower() == "true"), key=f"k_{p}_{hole_to_edit}")
             temp_df.at[idx, 'Mully'] = c6.number_input("Mully", 0, 2, value=int(df.at[idx, 'Mully']), key=f"m_{p}_{hole_to_edit}")
             st.divider()
 
         if st.form_submit_button("💾 SYNC SCORES TO CLOUD", use_container_width=True):
-            save_data(temp_df)
-            st.success("Synced!")
-            st.rerun()
-
-# --- DIAGNOSTIC EXPANDER ---
-with st.expander("🛠 SYSTEM DIAGNOSTICS"):
-    try:
-        email = st.secrets["connections"]["gsheets"]["client_email"]
-        st.write(f"Service Email to Share with: `{email}`")
-        client = get_gspread_client()
-        sh = client.open_by_url(st.secrets["connections"]["gsheets"]["spreadsheet"])
-        st.success(f"Connected to: {sh.title}")
-    except Exception as e:
-        st.error(f"Error: {e}")
+            try:
+                save_data(temp_df)
+                st.success(f"Hole {hole_to_edit} scores synced to Google Sheets!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Sync Failed: {e}")
