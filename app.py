@@ -3,33 +3,31 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import os
+import traceback
 
 # --- APP CONFIG ---
 st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
 
-# --- CSS FOR CENTERING & NEON STYLE ---
+# --- CSS STYLING ---
 st.markdown("""
     <style>
-    .centered-header {
-        display: flex; flex-direction: column; align-items: center;
-        justify-content: center; text-align: center; padding-bottom: 20px;
-    }
+    .centered-header { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding-bottom: 20px; }
     .main-title { color: #BFFF00; margin-top: 10px; font-size: 2.5rem; font-weight: bold; }
-    .sub-title { color: #888; font-size: 1rem; margin-top: -10px; }
-    .stroke-badge {
-        background-color: #333; color: #BFFF00; padding: 2px 10px;
-        border-radius: 12px; font-size: 0.85rem; margin-left: 10px; border: 1px solid #444;
-    }
+    .stroke-badge { background-color: #333; color: #BFFF00; padding: 2px 10px; border-radius: 12px; font-size: 0.85rem; margin-left: 10px; border: 1px solid #444; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOGO HANDLING ---
+# --- CONSTANTS ---
 logo_path = "Naboom logo Nuut.png"
+players = ["Bennie", "Adriaan", "Danie", "Martin", "Frederik"]
+hcp_map = {"Bennie": 36, "Adriaan": 33, "Danie": 33, "Martin": 32, "Frederik": 32}
+course_par = [4](https://github.com/burnash/gspread/issues/1310 "inline-citation")[4](https://github.com/burnash/gspread/issues/1310 "inline-citation")[5](https://docs.gspread.org/en/v6.0.0/user-guide.html "inline-citation")[3](https://docs.gspread.org/en/v6.0.0/ "inline-citation")[5](https://docs.gspread.org/en/v6.0.0/user-guide.html "inline-citation")[4](https://github.com/burnash/gspread/issues/1310 "inline-citation")[4](https://github.com/burnash/gspread/issues/1310 "inline-citation")[3](https://docs.gspread.org/en/v6.0.0/ "inline-citation")[4](https://github.com/burnash/gspread/issues/1310 "inline-citation")[4](https://github.com/burnash/gspread/issues/1310 "inline-citation")[4](https://github.com/burnash/gspread/issues/1310 "inline-citation")[5](https://docs.gspread.org/en/v6.0.0/user-guide.html "inline-citation")[3](https://docs.gspread.org/en/v6.0.0/ "inline-citation")[5](https://docs.gspread.org/en/v6.0.0/user-guide.html "inline-citation")[4](https://github.com/burnash/gspread/issues/1310 "inline-citation")[4](https://github.com/burnash/gspread/issues/1310 "inline-citation")[3](https://docs.gspread.org/en/v6.0.0/ "inline-citation")[4](https://github.com/burnash/gspread/issues/1310 "inline-citation")
+course_idx = [17][3](https://docs.gspread.org/en/v6.0.0/ "inline-citation")[7][5](https://docs.gspread.org/en/v6.0.0/user-guide.html "inline-citation")[9][13][1](https://stackoverflow.com/questions/72270126/how-to-update-a-row-using-the-gspread-python-module "inline-citation")[15][11][14][6][8][18][10][2](https://pypi.org/project/gspread/ "inline-citation")[4](https://github.com/burnash/gspread/issues/1310 "inline-citation")[16][12]
+headers = ["Player", "Hole", "Score", "Drinks", "Camo", "Throw", "Kick", "Mully"]
 
 # --- DATABASE CONNECTION ---
 @st.cache_resource
 def get_gspread_client():
-    # Uses the secrets you provided
     s = st.secrets["connections"]["gsheets"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(s, scopes=scopes)
@@ -41,6 +39,8 @@ def load_data():
     sh = client.open_by_key(sheet_id)
     worksheet = sh.get_worksheet(0)
     data = worksheet.get_all_records()
+    if not data:
+        return pd.DataFrame(columns=headers)
     return pd.DataFrame(data)
 
 def save_data(df):
@@ -49,59 +49,49 @@ def save_data(df):
     sh = client.open_by_key(sheet_id)
     worksheet = sh.get_worksheet(0)
     worksheet.clear()
-    # Fill empty values and convert to string for Google Sheets compatibility
+    # Convert all to string for safety, and use named arguments for version compatibility
     df_filled = df.fillna(0).astype(str)
-    worksheet.update([df_filled.columns.values.tolist()] + df_filled.values.tolist())
+    vals = [df_filled.columns.values.tolist()] + df_filled.values.tolist()
+    worksheet.update(values=vals, range_name="A1")
     st.cache_data.clear()
 
-# --- TOURNAMENT CONSTANTS ---
-players = ["Bennie", "Adriaan", "Danie", "Martin", "Frederik"]
-hcp_map = {"Bennie": 36, "Adriaan": 33, "Danie": 33, "Martin": 32, "Frederik": 32}
-course_par = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
-course_idx = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
-
-# --- LOAD DATA ---
-try:
-    df = load_data()
-    # Check if df is empty (first run)
-    if df.empty:
-        raise ValueError("Empty Sheet")
-except Exception:
-    # Initialize default table if sheet is empty or connection fails
-    rows = []
-    for p in players:
-        for h in range(1, 19):
-            rows.append({"Player": p, "Hole": h, "Score": 0, "Drinks": 0, "Camo": False, "Throw": False, "Kick": False, "Mully": 0})
-    df = pd.DataFrame(rows)
-
-# --- SCORING CALCULATIONS ---
+# --- HELPER FUNCTIONS ---
 def get_allowed_strokes(player, hole_num):
     hcp = hcp_map.get(player, 0)
     idx = course_idx[hole_num - 1]
     return (hcp // 18) + (1 if idx <= (hcp % 18) else 0)
 
 def get_points(row):
-    if str(row['Score']) == '0' or row['Score'] == 0: return 0
-    h_idx = int(row['Hole']) - 1
-    par = course_par[h_idx]
-    strokes = get_allowed_strokes(row['Player'], int(row['Hole']))
-    net = int(row['Score']) - strokes
-    pts = max(0, 2 - (net - par))
-    # Check if Camo powerup was used
-    is_camo = str(row['Camo']).lower() == "true"
-    return pts * 2 if is_camo else pts
+    try:
+        score = int(row['Score'])
+        if score == 0: return 0
+        h_idx = int(row['Hole']) - 1
+        par = course_par[h_idx]
+        strokes = get_allowed_strokes(row['Player'], int(row['Hole']))
+        net = score - strokes
+        pts = max(0, 2 - (net - par))
+        return pts * 2 if str(row['Camo']).lower() == "true" else pts
+    except:
+        return 0
+
+# --- DATA INITIALIZATION ---
+try:
+    df = load_data()
+    if df.empty: raise ValueError
+except Exception:
+    rows = []
+    for p in players:
+        for h in range(1, 19):
+            rows.append({"Player": p, "Hole": h, "Score": 0, "Drinks": 0, "Camo": False, "Throw": False, "Kick": False, "Mully": 0})
+    df = pd.DataFrame(rows)
 
 # --- UI HEADER ---
 st.markdown('<div class="centered-header">', unsafe_allow_html=True)
 if os.path.exists(logo_path):
-    st.image(logo_path, width=200)
+    st.image(logo_path, width=180)
 st.markdown('<p class="main-title">NABOOM NUUT: TACTICAL OPEN</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">Live Tournament Leaderboard & Tactical Resource Tracker</p>', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
-st.divider()
-
-# --- TABS ---
 tab1, tab2, tab3 = st.tabs(["🏆 LEADERBOARD", "🎒 THE ARSENAL", "🎯 HOLE COMMAND"])
 
 with tab1:
@@ -124,7 +114,16 @@ with tab2:
             "Mullies Used": pd.to_numeric(p_data['Mully'], errors='coerce').sum()
         })
     st.table(pd.DataFrame(arsenal))
-    st.info("Powerup Rules: Me2 (1/game) | Throw/Kick (1 per 9 holes) | Mulligans (2 per 18 holes)")
+    
+    st.divider()
+    if st.button("🚨 RESET & INITIALIZE GOOGLE SHEET", type="primary", use_container_width=True):
+        try:
+            save_data(df)
+            st.success("Google Sheet has been formatted and connected successfully!")
+            st.rerun()
+        except Exception as e:
+            st.error("Setup Failed. See technical details below:")
+            st.exception(e)
 
 with tab3:
     hole_to_edit = st.selectbox("Select Hole", range(1, 19))
@@ -134,10 +133,8 @@ with tab3:
     with st.form("score_entry_form"):
         temp_df = df.copy()
         for p in players:
-            # Filter for current player and hole
             p_mask = (temp_df['Player'] == p) & (temp_df['Hole'].astype(int) == hole_to_edit)
             idx = temp_df[p_mask].index[0]
-            
             strokes = get_allowed_strokes(p, hole_to_edit)
             st.markdown(f"**{p}** <span class='stroke-badge'>Hole Strokes: {strokes}</span>", unsafe_allow_html=True)
             
@@ -153,7 +150,8 @@ with tab3:
         if st.form_submit_button("💾 SYNC SCORES TO CLOUD", use_container_width=True):
             try:
                 save_data(temp_df)
-                st.success(f"Hole {hole_to_edit} scores synced to Google Sheets!")
+                st.success("Synced!")
                 st.rerun()
             except Exception as e:
-                st.error(f"Sync Failed: {e}")
+                st.error("Sync Failed!")
+                st.exception(e) # This will show the REAL error on screen
