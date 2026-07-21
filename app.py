@@ -1,19 +1,17 @@
 import streamlit as st
 import pandas as pd
+import urllib.parse
 
 # --- APP CONFIG & STYLING ---
-st.set_page_config(page_title="Naboomspruit Ope 2026", layout="wide")
+st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
 
-# CUSTOM BRANDING & LOGO
-def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
-
+# Custom CSS for the "Cyber-Turf" Aesthetic
 st.markdown("""
     <style>
     .stApp { background-color: #050505; color: #FFFFFF; }
     .leaderboard-val { font-family: 'IBM Plex Mono'; color: #00F0FF; font-size: 1.2rem; font-weight: bold; }
     .neon-text { color: #BFFF00; text-shadow: 0 0 10px #BFFF00; }
+    .stTable { background-color: rgba(255, 255, 255, 0.05); border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -43,36 +41,31 @@ def get_net_score(player, hole_idx):
     gross = st.session_state.scores[player][hole_idx]
     if gross == 0: return 0
     
-    # Calculate strokes received on this specific hole
     hcp = HANDICAPS[player]
     strokes_received = hcp // 18
     if COURSE['Index'][hole_idx] <= (hcp % 18):
         strokes_received += 1
         
     net = gross - strokes_received
-    # Apply Camo Ball multiplier to Net Score if active
     if st.session_state.powerups[player]['Camo'][hole_idx]:
         net = net * 2
     return net
 
-import urllib.parse
-
 # --- HEADER & LOGO ---
-col1, col2 = st.columns([1](https://github.com/commonmark/commonmark-spec/issues/503 "inline-citation")[4](https://github.com/orgs/community/discussions/60449 "inline-citation"))
+# Fixed the syntax error here by removing the broken links
+col1, col2 = st.columns([1, 4]) 
+
 with col1:
-    # This handles the spaces in "Naboom logo Nuut.png"
     logo_filename = "Naboom logo Nuut.png"
-    encoded_logo = urllib.parse.quote(logo_filename)
-    
     try:
-        # It first tries to find it locally in your GitHub folder
+        # This will load your logo from your GitHub folder
         st.image(logo_filename, width=150)
     except:
-        # Fallback if local loading fails (common in some Streamlit environments)
-        st.markdown("🚀") 
-        
+        st.markdown("🚀") # Shows if the image file isn't found yet
+
 with col2:
     st.markdown("<h1 class='neon-text'>NABOOM NUUT: TACTICAL OPEN</h1>", unsafe_allow_html=True)
+
 # --- TABS ---
 tab1, tab2, tab3 = st.tabs(["🏆 LEADERBOARD", "🎒 THE ARSENAL", "🎯 HOLE COMMAND"])
 
@@ -81,7 +74,8 @@ with tab1:
     for p in players:
         gross_total = sum(st.session_state.scores[p])
         net_total = sum([get_net_score(p, i) for i in range(18)])
-        par_diff = net_total - sum(COURSE['Par'][:st.session_state.current_hole]) if net_total > 0 else 0
+        par_sum = sum(COURSE['Par'][:st.session_state.current_hole])
+        par_diff = net_total - par_sum if net_total > 0 else 0
         
         lb_list.append({
             "Player": p,
@@ -95,14 +89,13 @@ with tab2:
     st.subheader("Remaining Powerups")
     for p in players:
         p_data = st.session_state.powerups[p]
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric(p, f"Mulligans: {2 - p_data['Mulligans']}")
-        
-        # Determine current half-round for T/K availability
+        c1, c2, c3 = st.columns(3)
+        c1.metric(p, f"Mulligans: {2 - p_data['Mulligans']}")
         half = 0 if st.session_state.current_hole <= 9 else 1
         tk_status = "READY" if p_data['Throws'][half] == 0 else "USED"
-        col_b.write(f"Throw/Kick ({'Front' if half==0 else 'Back'}): **{tk_status}**")
-        col_c.write(f"Me2: **{'AVAILABLE' if not p_data['Me2'] else 'USED'}**")
+        c2.write(f"Throw/Kick: **{tk_status}**")
+        c3.write(f"Me2: **{'READY' if not p_data['Me2'] else 'USED'}**")
+        st.divider()
 
 with tab3:
     h_idx = st.session_state.current_hole - 1
@@ -110,14 +103,14 @@ with tab3:
     
     for p in players:
         with st.container():
-            st.write(f"**{p}** (Hcp: {HANDICAPS[p]})")
-            c1, c2, c3 = st.columns(3)
-            st.session_state.scores[p][h_idx] = c1.number_input("Strokes", 0, 20, key=f"s_{p}")
+            c1, c2, c3 = st.columns([2, 1, 1])
+            st.session_state.scores[p][h_idx] = c1.number_input(f"{p} Strokes", 0, 20, key=f"s_{p}")
             st.session_state.powerups[p]['Camo'][h_idx] = c2.checkbox("Camo Ball", key=f"c_{p}")
             if c3.button("Use Throw/Kick", key=f"tk_b_{p}"):
                 st.session_state.powerups[p]['Throws'][0 if st.session_state.current_hole <= 9 else 1] = 1
+                st.toast(f"Powerup logged for {p}!")
 
-    if st.button("LOCK HOLE & PROCEED"):
+    if st.button("LOCK HOLE & PROCEED ➔", use_container_width=True):
         if st.session_state.current_hole < 18:
             st.session_state.current_hole += 1
             st.rerun()
