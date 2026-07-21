@@ -30,14 +30,12 @@ logo_path = "Naboom logo Nuut.png"
 @st.cache_resource
 def get_gspread_client():
     s = st.secrets["connections"]["gsheets"]
-    # We MUST have both Sheet and Drive scopes
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds = Credentials.from_service_account_info(s, scopes=scopes)
     return gspread.authorize(creds)
 
 def load_data():
     client = get_gspread_client()
-    # Try opening by URL or Key
     url = st.secrets["connections"]["gsheets"]["spreadsheet"]
     sh = client.open_by_url(url)
     worksheet = sh.get_worksheet(0)
@@ -49,7 +47,6 @@ def save_data(df):
     sh = client.open_by_url(url)
     worksheet = sh.get_worksheet(0)
     worksheet.clear()
-    # Ensure no NaN values go to Google
     df_filled = df.fillna(0).astype(str) 
     worksheet.update([df_filled.columns.values.tolist()] + df_filled.values.tolist())
     st.cache_data.clear()
@@ -57,10 +54,10 @@ def save_data(df):
 # --- CONSTANTS ---
 players = ["Bennie", "Adriaan", "Danie", "Martin", "Frederik"]
 hcp_map = {"Bennie": 36, "Adriaan": 33, "Danie": 33, "Martin": 32, "Frederik": 32}
-course_par = [4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")[4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")[5](https://stackoverflow.com/questions/39881518/permissions-error-when-running-a-script-in-a-google-spreadsheet "inline-citation")[3](https://stackoverflow.com/questions/53715582/google-sheets-api-permission-error-for-writing-with-gspread "inline-citation")[5](https://stackoverflow.com/questions/39881518/permissions-error-when-running-a-script-in-a-google-spreadsheet "inline-citation")[4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")[4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")[3](https://stackoverflow.com/questions/53715582/google-sheets-api-permission-error-for-writing-with-gspread "inline-citation")[4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")[4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")[4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")[5](https://stackoverflow.com/questions/39881518/permissions-error-when-running-a-script-in-a-google-spreadsheet "inline-citation")[3](https://stackoverflow.com/questions/53715582/google-sheets-api-permission-error-for-writing-with-gspread "inline-citation")[5](https://stackoverflow.com/questions/39881518/permissions-error-when-running-a-script-in-a-google-spreadsheet "inline-citation")[4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")[4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")[3](https://stackoverflow.com/questions/53715582/google-sheets-api-permission-error-for-writing-with-gspread "inline-citation")[4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")
-course_idx = [17][3](https://stackoverflow.com/questions/53715582/google-sheets-api-permission-error-for-writing-with-gspread "inline-citation")[7][5](https://stackoverflow.com/questions/39881518/permissions-error-when-running-a-script-in-a-google-spreadsheet "inline-citation")[9][13][1](https://docs.gspread.org/en/v6.2.1/oauth2.html "inline-citation")[15][11][14][6][8][18][10][2](https://docs.gspread.org/_/downloads/en/v5.4.0/pdf/ "inline-citation")[4](https://community.latenode.com/t/using-gspread-to-connect-with-google-sheets/12551 "inline-citation")[16][12]
+course_par = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
+course_idx = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
 
-# --- LOAD DATA (With Safe Error Handling) ---
+# --- DATA LOADING ---
 try:
     df = load_data()
 except Exception:
@@ -70,22 +67,22 @@ except Exception:
             rows.append({"Player": p, "Hole": h, "Score": 0, "Drinks": 0, "Camo": False, "Throw": False, "Kick": False, "Mully": 0})
     df = pd.DataFrame(rows)
 
-# --- HELPER: GET STROKES ---
+# --- SCORING HELPERS ---
 def get_allowed_strokes(player, hole_num):
     hcp = hcp_map.get(player, 0)
     idx = course_idx[hole_num - 1]
     return (hcp // 18) + (1 if idx <= (hcp % 18) else 0)
 
 def get_points(row):
-    if int(row['Score']) == 0: return 0
+    if str(row['Score']) == '0' or row['Score'] == 0: return 0
     h_idx = int(row['Hole']) - 1
     par = course_par[h_idx]
     strokes = get_allowed_strokes(row['Player'], int(row['Hole']))
     net = int(row['Score']) - strokes
     pts = max(0, 2 - (net - par))
-    return pts * 2 if row['Camo'] in [True, "True", 1] else pts
+    return pts * 2 if str(row['Camo']) == "True" else pts
 
-# --- UI HEADER (CENTERED) ---
+# --- CENTERED UI HEADER ---
 st.markdown('<div class="centered-header">', unsafe_allow_html=True)
 if os.path.exists(logo_path):
     st.image(logo_path, width=200)
@@ -99,7 +96,6 @@ tab1, tab2, tab3 = st.tabs(["🏆 LEADERBOARD", "🎒 THE ARSENAL", "🎯 HOLE C
 
 with tab1:
     df['Points'] = df.apply(get_points, axis=1)
-    # Ensure numeric for math
     df['Score'] = pd.to_numeric(df['Score'])
     df['Drinks'] = pd.to_numeric(df['Drinks'])
     summary = df.groupby("Player").agg({'Points': 'sum', 'Score': 'sum', 'Drinks': 'sum'}).reset_index()
@@ -115,7 +111,7 @@ with tab2:
             "Player": p,
             "Camo Used": (p_data['Camo'].astype(str) == "True").sum(),
             "Throws (1-9)": (p_data[p_data['Hole'].astype(int) <= 9]['Throw'].astype(str) == "True").sum(),
-            "Throws (10-18)": (p_data[p_data['Hole'].astype(int) > 9]['Throw'].astype(str) == "True").sum(),
+            "Kicks (1-9)": (p_data[p_data['Hole'].astype(int) <= 9]['Kick'].astype(str) == "True").sum(),
             "Mullies": pd.to_numeric(p_data['Mully']).sum()
         })
     st.table(pd.DataFrame(arsenal))
@@ -129,8 +125,10 @@ with tab3:
         temp_df = df.copy()
         for p in players:
             idx = temp_df[(temp_df['Player'] == p) & (temp_df['Hole'].astype(int) == hole_to_edit)].index[0]
+            
+            # VISIBLE STROKES
             strokes = get_allowed_strokes(p, hole_to_edit)
-            st.markdown(f"**{p}** <span class='stroke-badge'>Hole Strokes: {strokes}</span>", unsafe_allow_html=True)
+            st.markdown(f"**{p}** <span class='stroke-badge'>Strokes: {strokes}</span>", unsafe_allow_html=True)
             
             c1, c2, c3, c4, c5, c6 = st.columns(6)
             temp_df.at[idx, 'Score'] = c1.number_input("Score", 0, 15, value=int(df.at[idx, 'Score']), key=f"s_{p}_{hole_to_edit}")
@@ -143,25 +141,16 @@ with tab3:
 
         if st.form_submit_button("💾 SYNC SCORES TO CLOUD", use_container_width=True):
             save_data(temp_df)
-            st.success(f"Hole {hole_to_edit} data secured!")
+            st.success("Synced!")
             st.rerun()
 
-# --- DIAGNOSTIC TOOL (EXPANDER) ---
-with st.expander("🛠 SYSTEM DIAGNOSTICS (Open this if Sync fails)"):
+# --- DIAGNOSTIC EXPANDER ---
+with st.expander("🛠 SYSTEM DIAGNOSTICS"):
     try:
-        client_email = st.secrets["connections"]["gsheets"]["client_email"]
-        st.write(f"**1. Service Account Email:** `{client_email}`")
-        st.info("Make sure the Google Sheet is shared with THIS EXACT email as an 'Editor'.")
-        
-        # Test Drive Access
+        email = st.secrets["connections"]["gsheets"]["client_email"]
+        st.write(f"Service Email to Share with: `{email}`")
         client = get_gspread_client()
-        st.write("**2. API Connection:** ✅ Authenticated with Google")
-        
-        # Test File Access
-        url = st.secrets["connections"]["gsheets"]["spreadsheet"]
-        sh = client.open_by_url(url)
-        st.write(f"**3. Spreadsheet Found:** ✅ '{sh.title}'")
-        st.success("System is fully operational. If you see an error above, check the Drive API.")
+        sh = client.open_by_url(st.secrets["connections"]["gsheets"]["spreadsheet"])
+        st.success(f"Connected to: {sh.title}")
     except Exception as e:
-        st.error(f"Diagnostic Failed: {e}")
-        st.warning("If Step 3 failed but Step 1 is shared, you MUST enable the 'Google Drive API' in your Cloud Console.")
+        st.error(f"Error: {e}")
