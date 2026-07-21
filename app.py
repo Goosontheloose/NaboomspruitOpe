@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 # --- APP CONFIG & STYLING ---
-st.set_page_config(page_title="Neon Fairway: Tactical Open", layout="wide")
+st.set_page_config(page_title="Naboomspruit Ope 2026", layout="wide")
 
 # CUSTOM BRANDING & LOGO
 def local_css(file_name):
