@@ -5,8 +5,8 @@ import pandas as pd
 st.set_page_config(page_title="Naboomspruit Ope 2026", layout="wide")
 
 # CUSTOM BRANDING & LOGO
-def local_css(file_name):
-    with open(file_name) as f:
+def local_css(Naboom logo Nuut.png):
+    with open(Naboom logo Nuut.png) as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
 st.markdown("""
