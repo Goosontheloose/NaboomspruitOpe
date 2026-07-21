@@ -12,7 +12,7 @@ st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
 logo_filename = "Naboom logo Nuut.png"
 github_user = st.secrets.get("github_username", "YOUR_GITHUB_USERNAME")
 github_repo = st.secrets.get("github_repo", "YOUR_REPO_NAME")
-safe_logo_url = ""Naboom logo Nuut.png"
+safe_logo_url = "Naboom logo Nuut.png"
 
 # --- DATABASE CONNECTION ---
 @st.cache_resource
