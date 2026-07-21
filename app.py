@@ -7,7 +7,40 @@ import os
 # --- APP CONFIG ---
 st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
 
-# --- LOGO HANDLING (Local Folder) ---
+# --- CSS FOR PERFECT CENTERING ---
+st.markdown("""
+    <style>
+    .centered-header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding-bottom: 20px;
+    }
+    .main-title {
+        color: #BFFF00;
+        margin-top: 10px;
+        font-size: 2.5rem;
+        font-weight: bold;
+    }
+    .sub-title {
+        color: #888;
+        font-size: 1rem;
+        margin-top: -10px;
+    }
+    .stroke-badge {
+        background-color: #333;
+        color: #BFFF00;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 0.8rem;
+        margin-left: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- LOGO HANDLING ---
 logo_path = "Naboom logo Nuut.png"
 
 # --- DATABASE CONNECTION ---
@@ -50,27 +83,29 @@ except Exception:
             rows.append({"Player": p, "Hole": h, "Score": 0, "Drinks": 0, "Camo": False, "Throw": False, "Kick": False, "Mully": 0})
     df = pd.DataFrame(rows)
 
+# --- CALCULATE STROKES PER HOLE ---
+def get_allowed_strokes(player, hole_num):
+    hcp = hcp_map[player]
+    idx = course_idx[hole_num - 1]
+    return (hcp // 18) + (1 if idx <= (hcp % 18) else 0)
+
 # --- SCORING LOGIC ---
 def get_points(row):
     if row['Score'] == 0: return 0
     h_idx = int(row['Hole']) - 1
-    hcp = hcp_map[row['Player']]
     par = course_par[h_idx]
-    idx = course_idx[h_idx]
-    strokes = (hcp // 18) + (1 if idx <= (hcp % 18) else 0)
+    strokes = get_allowed_strokes(row['Player'], int(row['Hole']))
     net = row['Score'] - strokes
     pts = max(0, 2 - (net - par))
     return pts * 2 if row['Camo'] else pts
 
 # --- CENTERED HEADER ---
-# Using 3 columns to force the logo and text into the center
-left_spacer, center_col, right_spacer = st.columns([1, 2, 1])
-
-with center_col:
-    if os.path.exists(logo_path):
-        st.image(logo_path, width=180) # Slightly larger for center focus
-    st.markdown("<h1 style='text-align: center; color: #BFFF00; margin-top: -10px;'>NABOOM NUUT: TACTICAL OPEN</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #888;'>Sole Scorekeeper Portal | Tactical Resource Management</p>", unsafe_allow_html=True)
+st.markdown('<div class="centered-header">', unsafe_allow_html=True)
+if os.path.exists(logo_path):
+    st.image(logo_path, width=200)
+st.markdown('<p class="main-title">NABOOM NUUT: TACTICAL OPEN</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">Sole Scorekeeper Portal | Tactical Resource Management</p>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
@@ -86,6 +121,7 @@ with tab1:
 
 with tab2:
     st.subheader("Tactical Resource Inventory")
+    # ... (Same Arsenal logic as before)
     arsenal = []
     for p in players:
         p_data = df[df['Player'] == p]
@@ -99,19 +135,22 @@ with tab2:
             "Mullies Used": p_data['Mully'].sum()
         })
     st.table(pd.DataFrame(arsenal))
-    st.info("Limits: Me2 (1/game) | Throws/Kicks (1 per 9 holes) | Mulligans (2 per 18 holes)")
 
 with tab3:
     hole_to_edit = st.selectbox("Select Hole", range(1, 19))
-    st.markdown(f"### Hole {hole_to_edit} (Par {course_par[hole_to_edit-1]})")
+    h_idx = hole_to_edit - 1
+    st.markdown(f"### Hole {hole_to_edit} (Par {course_par[h_idx]} | Index {course_idx[h_idx]})")
     
     with st.form("score_entry_form"):
         temp_df = df.copy()
         for p in players:
             idx = temp_df[(temp_df['Player'] == p) & (temp_df['Hole'] == hole_to_edit)].index[0]
-            st.markdown(f"**{p}**")
-            c1, c2, c3, c4, c5, c6 = st.columns(6)
             
+            # CALCULATE STROKES FOR DISPLAY
+            strokes = get_allowed_strokes(p, hole_to_edit)
+            st.markdown(f"**{p}** <span class='stroke-badge'>Strokes: {strokes}</span>", unsafe_allow_html=True)
+            
+            c1, c2, c3, c4, c5, c6 = st.columns(6)
             temp_df.at[idx, 'Score'] = c1.number_input("Score", 0, 15, value=int(df.at[idx, 'Score']), key=f"s_{p}_{hole_to_edit}")
             temp_df.at[idx, 'Drinks'] = c2.number_input("Drinks", 0, 10, value=int(df.at[idx, 'Drinks']), key=f"d_{p}_{hole_to_edit}")
             temp_df.at[idx, 'Camo'] = c3.checkbox("Camo", value=bool(df.at[idx, 'Camo']), key=f"c_{p}_{hole_to_edit}")
