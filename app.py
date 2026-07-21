@@ -2,17 +2,13 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from urllib.parse import quote
+import os
 
-# --- APP CONFIG & LOGO ---
+# --- APP CONFIG ---
 st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
 
-# Logo configuration
-# If the logo is in your GitHub repo, this will find it.
-logo_filename = "Naboom logo Nuut.png"
-github_user = st.secrets.get("github_username", "YOUR_GITHUB_USERNAME")
-github_repo = st.secrets.get("github_repo", "YOUR_REPO_NAME")
-safe_logo_url = "Naboom logo Nuut.png"
+# --- LOGO HANDLING (Local Folder) ---
+logo_path = "Naboom logo Nuut.png"
 
 # --- DATABASE CONNECTION ---
 @st.cache_resource
@@ -26,20 +22,18 @@ def load_data():
     client = get_gspread_client()
     sh = client.open_by_url(st.secrets["connections"]["gsheets"]["spreadsheet"])
     worksheet = sh.get_worksheet(0)
-    data = worksheet.get_all_records()
-    return pd.DataFrame(data)
+    return pd.DataFrame(worksheet.get_all_records())
 
 def save_data(df):
     client = get_gspread_client()
     sh = client.open_by_url(st.secrets["connections"]["gsheets"]["spreadsheet"])
     worksheet = sh.get_worksheet(0)
     worksheet.clear()
-    # Handle NaN values to prevent JSON errors
     df_filled = df.fillna(0)
     worksheet.update([df_filled.columns.values.tolist()] + df_filled.values.tolist())
     st.cache_data.clear()
 
-# --- TOURNAMENT CONSTANTS ---
+# --- CONSTANTS ---
 players = ["Bennie", "Adriaan", "Danie", "Martin", "Frederik"]
 hcp_map = {"Bennie": 36, "Adriaan": 33, "Danie": 33, "Martin": 32, "Frederik": 32}
 course_par = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
@@ -50,7 +44,6 @@ try:
     df = load_data()
     if df.empty: raise ValueError
 except Exception:
-    # Initial data structure if sheet is empty
     rows = []
     for p in players:
         for h in range(1, 19):
@@ -64,20 +57,24 @@ def get_points(row):
     hcp = hcp_map[row['Player']]
     par = course_par[h_idx]
     idx = course_idx[h_idx]
-    # Calculate strokes given based on hole index
     strokes = (hcp // 18) + (1 if idx <= (hcp % 18) else 0)
     net = row['Score'] - strokes
     pts = max(0, 2 - (net - par))
     return pts * 2 if row['Camo'] else pts
 
-# --- UI LAYOUT ---
-col1, col2 = st.columns([1, 5])
-with col1:
-    st.image(safe_logo_url, width=120)
-with col2:
-    st.markdown("<h1 style='color: #BFFF00; margin-bottom: 0;'>NABOOM NUUT: TACTICAL OPEN</h1>", unsafe_allow_html=True)
-    st.caption("Sole Scorekeeper Portal | Real-time Cloud Sync")
+# --- CENTERED HEADER ---
+# Using 3 columns to force the logo and text into the center
+left_spacer, center_col, right_spacer = st.columns([1, 2, 1])
 
+with center_col:
+    if os.path.exists(logo_path):
+        st.image(logo_path, width=180) # Slightly larger for center focus
+    st.markdown("<h1 style='text-align: center; color: #BFFF00; margin-top: -10px;'>NABOOM NUUT: TACTICAL OPEN</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #888;'>Sole Scorekeeper Portal | Tactical Resource Management</p>", unsafe_allow_html=True)
+
+st.divider()
+
+# --- TABS ---
 tab1, tab2, tab3 = st.tabs(["🏆 LEADERBOARD", "🎒 THE ARSENAL", "🎯 HOLE COMMAND"])
 
 with tab1:
@@ -105,14 +102,11 @@ with tab2:
     st.info("Limits: Me2 (1/game) | Throws/Kicks (1 per 9 holes) | Mulligans (2 per 18 holes)")
 
 with tab3:
-    hole_to_edit = st.selectbox("Select Hole to Record", range(1, 19))
-    st.markdown(f"### Hole {hole_to_edit} (Par {course_par[hole_to_edit-1]} | Index {course_idx[hole_to_edit-1]})")
+    hole_to_edit = st.selectbox("Select Hole", range(1, 19))
+    st.markdown(f"### Hole {hole_to_edit} (Par {course_par[hole_to_edit-1]})")
     
-    # Use a form to batch the updates
     with st.form("score_entry_form"):
-        # We need to keep a temporary copy of the edits to apply on submit
         temp_df = df.copy()
-        
         for p in players:
             idx = temp_df[(temp_df['Player'] == p) & (temp_df['Hole'] == hole_to_edit)].index[0]
             st.markdown(f"**{p}**")
@@ -126,10 +120,7 @@ with tab3:
             temp_df.at[idx, 'Mully'] = c6.number_input("Mully", 0, 2, value=int(df.at[idx, 'Mully']), key=f"m_{p}_{hole_to_edit}")
             st.divider()
 
-        submit = st.form_submit_button("💾 SYNC SCORES TO CLOUD", use_container_width=True)
-        
-        if submit:
-            with st.spinner("Uploading to Google Sheets..."):
-                save_data(temp_df)
-                st.success(f"Hole {hole_to_edit} data secured!")
-                st.rerun()
+        if st.form_submit_button("💾 SYNC SCORES TO CLOUD", use_container_width=True):
+            save_data(temp_df)
+            st.success(f"Hole {hole_to_edit} data secured!")
+            st.rerun()
