@@ -25,7 +25,6 @@ course_idx = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
 headers = ["Player", "Hole", "Score", "Drinks", "Camo", "Throw", "Kick", "Mully"]
 
 # --- DATABASE CONNECTION ---
-@st.cache_resource
 def get_gspread_client():
     s = st.secrets["connections"]["gsheets"]
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -34,17 +33,16 @@ def get_gspread_client():
 
 def load_data():
     client = get_gspread_client()
-    sheet_id = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    # .strip() removes any accidental spaces or newlines from your secrets
+    sheet_id = st.secrets["connections"]["gsheets"]["spreadsheet"].strip()
     sh = client.open_by_key(sheet_id)
     worksheet = sh.get_worksheet(0)
     data = worksheet.get_all_records()
-    if not data:
-        return pd.DataFrame(columns=headers)
-    return pd.DataFrame(data)
+    return pd.DataFrame(data) if data else pd.DataFrame(columns=headers)
 
 def save_data(df):
     client = get_gspread_client()
-    sheet_id = st.secrets["connections"]["gsheets"]["spreadsheet"]
+    sheet_id = st.secrets["connections"]["gsheets"]["spreadsheet"].strip()
     sh = client.open_by_key(sheet_id)
     worksheet = sh.get_worksheet(0)
     worksheet.clear()
@@ -69,21 +67,20 @@ def get_points(row):
         net = score - strokes
         pts = max(0, 2 - (net - par))
         return pts * 2 if str(row['Camo']).lower() == "true" else pts
-    except:
-        return 0
+    except: return 0
 
-# --- DATA INIT ---
+# --- DATA INITIALIZATION ---
 try:
     df = load_data()
     if df.empty or len(df) < 5: raise ValueError
-except:
+except Exception as e:
     rows = []
     for p in players:
         for h in range(1, 19):
             rows.append({"Player": p, "Hole": h, "Score": 0, "Drinks": 0, "Camo": False, "Throw": False, "Kick": False, "Mully": 0})
     df = pd.DataFrame(rows)
 
-# --- HEADER ---
+# --- UI HEADER ---
 st.markdown('<div class="centered-header">', unsafe_allow_html=True)
 if os.path.exists(logo_path):
     st.image(logo_path, width=150)
@@ -101,6 +98,11 @@ with tab1:
     st.dataframe(summary.sort_values("Points", ascending=False), use_container_width=True, hide_index=True)
 
 with tab2:
+    st.subheader("System Debugger")
+    st.write(f"Logged in as: `{st.secrets['connections']['gsheets']['client_email']}`")
+    st.write(f"Targeting ID: `{st.secrets['connections']['gsheets']['spreadsheet'].strip()}`")
+    
+    st.divider()
     st.subheader("Tactical Resource Inventory")
     arsenal = []
     for p in players:
@@ -112,7 +114,8 @@ with tab2:
             "Mullies Used": pd.to_numeric(p_data['Mully'], errors='coerce').sum()
         })
     st.table(pd.DataFrame(arsenal))
-    if st.button("🚨 INITIALIZE NEW SHEET", type="secondary"):
+    
+    if st.button("🚨 FORCE DATA INITIALIZATION", type="primary"):
         save_data(df)
         st.rerun()
 
@@ -121,7 +124,7 @@ with tab3:
     h_idx = hole_to_edit - 1
     st.markdown(f"### Hole {hole_to_edit} (Par {course_par[h_idx]} | Index {course_idx[h_idx]})")
     
-    with st.form("score_entry"):
+    with st.form("score_entry_form"):
         temp_df = df.copy()
         for p in players:
             p_mask = (temp_df['Player'] == p) & (temp_df['Hole'].astype(int) == hole_to_edit)
@@ -137,6 +140,10 @@ with tab3:
             st.divider()
 
         if st.form_submit_button("💾 SYNC SCORES", use_container_width=True):
-            save_data(temp_df)
-            st.success("Synced!")
-            st.rerun()
+            try:
+                save_data(temp_df)
+                st.success("Successfully Synced!")
+                st.rerun()
+            except Exception as e:
+                st.error("Sync Failed")
+                st.exception(e)
