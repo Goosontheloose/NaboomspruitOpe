@@ -5,8 +5,8 @@ import pandas as pd
 st.set_page_config(page_title="Naboomspruit Ope 2026", layout="wide")
 
 # CUSTOM BRANDING & LOGO
-def local_css(Naboom logo Nuut.png):
-    with open(Naboom logo Nuut.png) as f:
+def local_css(file_name):
+    with open(file_name) as f:
         st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
 st.markdown("""
@@ -55,17 +55,24 @@ def get_net_score(player, hole_idx):
         net = net * 2
     return net
 
-# --- HEADER & LOGO ---
-col1, col2 = st.columns([1, 4])
-with col1:
-    # To add your logo: Save your image as 'logo.png' in the GitHub repo
-    try:
-        st.image("logo.png", width=150)
-    except:
-        st.markdown("🚀") # Placeholder icon
-with col2:
-    st.markdown("<h1 class='neon-text'>NEON FAIRWAY: TACTICAL OPEN</h1>", unsafe_allow_html=True)
+import urllib.parse
 
+# --- HEADER & LOGO ---
+col1, col2 = st.columns([1](https://github.com/commonmark/commonmark-spec/issues/503 "inline-citation")[4](https://github.com/orgs/community/discussions/60449 "inline-citation"))
+with col1:
+    # This handles the spaces in "Naboom logo Nuut.png"
+    logo_filename = "Naboom logo Nuut.png"
+    encoded_logo = urllib.parse.quote(logo_filename)
+    
+    try:
+        # It first tries to find it locally in your GitHub folder
+        st.image(logo_filename, width=150)
+    except:
+        # Fallback if local loading fails (common in some Streamlit environments)
+        st.markdown("🚀") 
+        
+with col2:
+    st.markdown("<h1 class='neon-text'>NABOOM NUUT: TACTICAL OPEN</h1>", unsafe_allow_html=True)
 # --- TABS ---
 tab1, tab2, tab3 = st.tabs(["🏆 LEADERBOARD", "🎒 THE ARSENAL", "🎯 HOLE COMMAND"])
 
