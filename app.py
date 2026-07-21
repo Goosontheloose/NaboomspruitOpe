@@ -84,3 +84,32 @@ with tab2:
         p_data = df[df['Player'] == p]
         arsenal.append({
             "Player": p,
+            "Camo Used": p_data['Camo'].sum(),
+            "Throws (Out)": p_data[p_data['Hole'] <= 9]['Throw'].sum(),
+            "Throws (In)": p_data[p_data['Hole'] > 9]['Throw'].sum(),
+            "Kicks (Out)": p_data[p_data['Hole'] <= 9]['Kick'].sum(),
+            "Kicks (In)": p_data[p_data['Hole'] > 9]['Kick'].sum(),
+            "Mullies": p_data['Mully'].sum()
+        })
+    st.table(pd.DataFrame(arsenal))
+
+with tab3:
+    hole = st.selectbox("Select Hole", range(1, 19))
+    st.info(f"Par: {course_par[hole-1]} | Index: {course_idx[hole-1]}")
+    
+    with st.form("score_form"):
+        for p in players:
+            idx = df[(df['Player'] == p) & (df['Hole'] == hole)].index[0]
+            st.markdown(f"**{p}**")
+            c1, c2, c3, c4, c5, c6 = st.columns(6)
+            df.at[idx, 'Score'] = c1.number_input("Strokes", 0, 15, value=int(df.at[idx, 'Score']), key=f"s{p}")
+            df.at[idx, 'Drinks'] = c2.number_input("Drinks", 0, 10, value=int(df.at[idx, 'Drinks']), key=f"d{p}")
+            df.at[idx, 'Camo'] = c3.checkbox("Camo", value=bool(df.at[idx, 'Camo']), key=f"c{p}")
+            df.at[idx, 'Throw'] = c4.checkbox("Throw", value=bool(df.at[idx, 'Throw']), key=f"t{p}")
+            df.at[idx, 'Kick'] = c5.checkbox("Kick", value=bool(df.at[idx, 'Kick']), key=f"k{p}")
+            df.at[idx, 'Mully'] = c6.number_input("Mully", 0, 2, value=int(df.at[idx, 'Mully']), key=f"m{p}")
+        
+        if st.form_submit_state("Save Data"):
+            save_data(df)
+            st.success("Scores Synced to Cloud!")
+            st.rerun()
