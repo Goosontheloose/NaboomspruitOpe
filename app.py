@@ -1,150 +1,123 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
-# --- APP CONFIG & STYLING ---
-st.set_page_config(page_title="Naboomspruit Ope 2026", layout="wide")
+# --- APP CONFIG ---
+st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
 
+# --- STYLING ---
 st.markdown("""
     <style>
     .stApp { background-color: #050505; color: #FFFFFF; }
-    .neon-text { 
-        color: #BFFF00; 
-        text-shadow: 0 0 10px #BFFF00; 
-        text-align: center; 
-        width: 100%;
-    }
-    .inventory-card { 
-        padding: 15px; 
-        border-radius: 10px; 
-        border: 1px solid #333; 
-        background: rgba(255,255,255,0.03);
-        margin-bottom: 10px;
-    }
-    /* Centering helper for images in columns */
-    [data-testid="stHorizontalBlock"] {
-        align-items: center;
-    }
+    .neon-text { color: #BFFF00; text-shadow: 0 0 10px #BFFF00; text-align: center; width: 100%; }
+    [data-testid="stHorizontalBlock"] { align-items: center; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- COURSE & PLAYER DATA ---
-COURSE = {
-    'Par': [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4],
-    'Index': [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
-}
+# --- DATABASE CONNECTION ---
+# This connects to the URL you will put in your Streamlit Secrets (Phase 3)
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-HANDICAPS = {
-    "Bennie": 36, "Adriaan": 33, "Danie": 33, "Martin": 32, "Frederik": 32
-}
-players = list(HANDICAPS.keys())
+def load_data():
+    return conn.read(ttl="5s") # Refreshes every 5 seconds
 
-# --- SESSION STATE INITIALIZATION ---
-if 'scores' not in st.session_state:
-    st.session_state.scores = {p: [0]*18 for p in players}
-if 'drinks' not in st.session_state:
-    st.session_state.drinks = {p: [0]*18 for p in players}
-if 'powerups' not in st.session_state:
-    st.session_state.powerups = {p: {
-        'CamoUsed': False, 'CamoHole': None,
-        'Me2': False, 
-        'Throws': [0, 0], 'Kicks': [0, 0], 
-        'Mulligans': 0
-    } for p in players}
-if 'current_hole' not in st.session_state:
-    st.session_state.current_hole = 1
+def save_data(df):
+    conn.update(data=df)
+    st.cache_data.clear()
+
+# --- INITIALIZE TOURNAMENT DATA ---
+players = ["Bennie", "Adriaan", "Danie", "Martin", "Frederik"]
+hcp_map = {"Bennie": 36, "Adriaan": 33, "Danie": 33, "Martin": 32, "Frederik": 32}
+course_par = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
+course_idx = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
+
+# Try to load existing data, otherwise create new table
+try:
+    df = load_data()
+except:
+    # Create empty tournament structure
+    rows = []
+    for p in players:
+        for h in range(1, 19):
+            rows.append({
+                "Player": p, "Hole": h, "Score": 0, "Drinks": 0, 
+                "Camo": False, "Throw": False, "Kick": False, "Mully": 0
+            })
+    df = pd.DataFrame(rows)
+    save_data(df)
 
 # --- CALCULATION LOGIC ---
-def get_net_score(player, hole_idx):
-    gross = st.session_state.scores[player][hole_idx]
-    if gross == 0: return 0
-    hcp = HANDICAPS[player]
-    received = (hcp // 18) + (1 if COURSE['Index'][hole_idx] <= (hcp % 18) else 0)
-    net = gross - received
-    if st.session_state.powerups[player]['CamoUsed'] and st.session_state.powerups[player]['CamoHole'] == hole_idx + 1:
-        net *= 2
-    return net
+def get_points(row):
+    if row['Score'] == 0: return 0
+    h_idx = int(row['Hole']) - 1
+    hcp = hcp_map[row['Player']]
+    par = course_par[h_idx]
+    idx = course_idx[h_idx]
+    strokes = (hcp // 18) + (1 if idx <= (hcp % 18) else 0)
+    net = row['Score'] - strokes
+    diff = net - par
+    pts = 0
+    if diff >= 2: pts = 0
+    elif diff == 1: pts = 1
+    elif diff == 0: pts = 2
+    elif diff == -1: pts = 3
+    elif diff == -2: pts = 4
+    else: pts = 5
+    return pts * 2 if row['Camo'] else pts
 
-# --- HEADER (CENTERED) ---
-# We create 3 columns and put the logo in the middle one (index 1)
+# --- HEADER ---
 col_l, col_mid, col_r = st.columns([1, 2, 1])
-
 with col_mid:
-    try: 
-        # Display the logo in the center column
-        st.image("Naboom logo Nuut.png", use_container_width=True)
-    except: 
-        st.markdown("<h1 style='text-align: center;'>🚀</h1>", unsafe_allow_html=True)
-
-# Title is also centered via the CSS class 'neon-text'
-st.markdown("<h1 class='neon-text'>NABOOMSPRUIT OPE : 2026</h1>", unsafe_allow_html=True)
-st.divider()
+    try: st.image("Naboom logo Nuut.png", use_container_width=True)
+    except: st.markdown("<h1 style='text-align: center;'>🚀</h1>", unsafe_allow_html=True)
+st.markdown("<h1 class='neon-text'>NABOOM NUUT: TACTICAL OPEN</h1>", unsafe_allow_html=True)
 
 # --- TABS ---
-tab1, tab2, tab3 = st.tabs(["🏆 LEADERBOARD", "🎒 THE ARSENAL", "🎯 HOLE COMMAND"])
+tab1, tab2, tab3 = st.tabs(["🏆 LIVE LEADERBOARD", "🎒 THE ARSENAL", "🎯 SCORE INPUT"])
 
 with tab1:
-    lb_data = []
-    for p in players:
-        net_total = sum([get_net_score(p, i) for i in range(18)])
-        lb_data.append({
-            "Player": p, "Gross": sum(st.session_state.scores[p]),
-            "Net": net_total, "Drinks": sum(st.session_state.drinks[p]),
-            "Gimme": f"{sum(st.session_state.drinks[p]) * 10}cm"
-        })
-    st.table(pd.DataFrame(lb_data).sort_values("Net"))
+    df['Points'] = df.apply(get_points, axis=1)
+    summary = df.groupby("Player").agg({
+        'Points': 'sum', 'Score': 'sum', 'Drinks': 'sum'
+    }).reset_index()
+    summary['Gimme (cm)'] = summary['Drinks'] * 10
+    st.table(summary.sort_values("Points", ascending=False))
+    if st.button("🔄 Sync Scores"): st.rerun()
 
 with tab2:
-    st.subheader("Tactical Inventory Status")
-    half = 0 if st.session_state.current_hole <= 9 else 1
-    
     for p in players:
-        p_pwr = st.session_state.powerups[p]
-        with st.container():
-            st.markdown(f"### {p}")
-            c1, c2, c3, c4, c5 = st.columns(5)
-            
-            camo_status = f"🎯 HOLE {p_pwr['CamoHole']}" if p_pwr['CamoUsed'] else "✅ READY"
-            c1.metric("Camo Ball", camo_status)
-            
-            t_status = "✅ READY" if p_pwr['Throws'][half] == 0 else "❌ USED"
-            k_status = "✅ READY" if p_pwr['Kicks'][half] == 0 else "❌ USED"
-            c2.write(f"**Throw:** {t_status}")
-            c3.write(f"**Kick:** {k_status}")
-            
-            c4.metric("Mulligans", 2 - p_pwr['Mulligans'])
-            c5.metric("Gimme Gauge", f"{sum(st.session_state.drinks[p]) * 10}cm")
-            st.divider()
+        p_df = df[df['Player'] == p]
+        with st.expander(f"📊 {p}'s Equipment"):
+            c1, c2, c3, c4 = st.columns(4)
+            camo_h = p_df[p_df['Camo'] == True]['Hole'].values
+            c1.metric("Camo Ball", f"Hole {camo_h[0]}" if len(camo_h)>0 else "READY")
+            c2.metric("Mulligans", 2 - p_df['Mully'].sum())
+            c3.metric("Gimme", f"{p_df['Drinks'].sum()*10}cm")
+            # Resource counting for Throws/Kicks
+            curr_hole = st.session_state.get('active_hole', 1)
+            half_range = range(1,10) if curr_hole <= 9 else range(10,19)
+            t_used = p_df[p_df['Hole'].isin(half_range)]['Throw'].any()
+            k_used = p_df[p_df['Hole'].isin(half_range)]['Kick'].any()
+            c4.write(f"**Throw:** {'❌' if t_used else '✅'} | **Kick:** {'❌' if k_used else '✅'}")
 
 with tab3:
-    h_idx = st.session_state.current_hole - 1
-    st.markdown(f"### ⛳ HOLE {st.session_state.current_hole} (Par {COURSE['Par'][h_idx]})")
+    hole = st.number_input("Select Hole", 1, 18, key='active_hole')
+    st.markdown(f"### ⛳ Hole {hole} (Par {course_par[hole-1]})")
     
     for p in players:
+        idx = df[(df['Player'] == p) & (df['Hole'] == hole)].index[0]
         with st.container():
-            c1, c2, c3, c4, c5, c6 = st.columns([1, 1, 1, 1, 1, 1])
+            c1, c2, c3, c4, c5, c6 = st.columns([1,1,1,1,1,1])
+            df.at[idx, 'Score'] = c1.number_input(f"Score ({p})", 0, 15, value=int(df.at[idx, 'Score']), key=f"s{p}{hole}")
+            df.at[idx, 'Drinks'] = c2.number_input(f"Drinks ({p})", 0, 10, value=int(df.at[idx, 'Drinks']), key=f"d{p}{hole}")
             
-            st.session_state.scores[p][h_idx] = c1.number_input(f"Score ({p})", 0, 15, key=f"s_{p}")
-            st.session_state.drinks[p][h_idx] = c2.number_input(f"Drinks ({p})", 0, 10, key=f"d_{p}")
-            
-            if c3.button("Camo", key=f"cam_{p}", disabled=st.session_state.powerups[p]['CamoUsed']):
-                st.session_state.powerups[p]['CamoUsed'] = True
-                st.session_state.powerups[p]['CamoHole'] = st.session_state.current_hole
-                st.toast(f"CAMO BALL DEPLOYED FOR {p}!")
-
-            if c4.button("Throw", key=f"t_{p}", disabled=st.session_state.powerups[p]['Throws'][half] == 1):
-                st.session_state.powerups[p]['Throws'][half] = 1
-                st.toast(f"{p} used Throw!")
-
-            if c5.button("Kick", key=f"k_{p}", disabled=st.session_state.powerups[p]['Kicks'][half] == 1):
-                st.session_state.powerups[p]['Kicks'][half] = 1
-                st.toast(f"{p} used Kick!")
-
-            if c6.button("Mully", key=f"m_{p}", disabled=st.session_state.powerups[p]['Mulligans'] >= 2):
-                st.session_state.powerups[p]['Mulligans'] += 1
-                st.toast(f"Mulligan used by {p}!")
+            # Action Buttons (Toggle logic)
+            if c3.checkbox("Camo", value=bool(df.at[idx, 'Camo']), key=f"c{p}{hole}"): df.at[idx, 'Camo'] = True
+            if c4.checkbox("Throw", value=bool(df.at[idx, 'Throw']), key=f"t{p}{hole}"): df.at[idx, 'Throw'] = True
+            if c5.checkbox("Kick", value=bool(df.at[idx, 'Kick']), key=f"k{p}{hole}"): df.at[idx, 'Kick'] = True
+            if c6.button("Mully", key=f"m{p}{hole}"): df.at[idx, 'Mully'] = 1
         st.divider()
-
-    if st.button("LOCK HOLE & ADVANCE", use_container_width=True):
-        if st.session_state.current_hole < 18:
-            st.session_state.current_hole += 1
-            st.rerun()
+    
+    if st.button("💾 SAVE & SYNC ALL PHONES", use_container_width=True):
+        save_data(df)
+        st.success("Scores Uploaded to Cloud!")
