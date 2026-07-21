@@ -76,7 +76,7 @@ with col_mid:
         st.markdown("<h1 style='text-align: center;'>🚀</h1>", unsafe_allow_html=True)
 
 # Title is also centered via the CSS class 'neon-text'
-st.markdown("<h1 class='neon-text'>NABOOM NUUT: TACTICAL OPEN</h1>", unsafe_allow_html=True)
+st.markdown("<h1 class='neon-text'>NABOOMSPRUIT OPE : 2026</h1>", unsafe_allow_html=True)
 st.divider()
 
 # --- TABS ---
