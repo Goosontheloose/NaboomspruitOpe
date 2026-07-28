@@ -1,10 +1,15 @@
 import streamlit as st
 import pandas as pd
 import gspread
+import time
 from google.oauth2.service_account import Credentials
 
 # --- APP CONFIG ---
 st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
+
+# Initialize Reset Counter to force UI refresh
+if 'reset_id' not in st.session_state:
+    st.session_state.reset_id = 0
 
 # --- UI STYLING ---
 st.markdown("""
@@ -124,7 +129,6 @@ with tab1:
             tag_html = f'<div class="tag-container">{"".join(tags)}</div>' if tags else ""
             s_val = int(r['score']) if r['score'] > 0 else "-"
             p_val = int(r['pts']) if r['score'] > 0 else "-"
-            
             html += f'<td class="{"camo-active" if is_camo else ""}"><span class="score-val">{s_val}</span><span class="divider">|</span><span class="pts-val">{p_val}</span>{tag_html}</td>'
         
         html += f'<td class="total-box">{int(p_df["score"].sum())}</td>'
@@ -139,7 +143,6 @@ with tab2:
         camo_used = (p_df['camo'].astype(str).str.upper() == "TRUE").sum()
         me2_used = (p_df['me2'].astype(str).str.upper() == "TRUE").any()
         total_drinks = int(p_df['drinks'].sum())
-        
         inv.append({
             "Player": p,
             "Gimme Distance": f"📏 {total_drinks * 10} cm",
@@ -155,17 +158,22 @@ with tab3:
     h_idx = st.selectbox("Select Hole", range(1, 19))
     par_val = COURSE_PAR[h_idx-1]
     
-    # --- HARD RESET ---
+    # --- RESET HOLE ---
     if st.button("🚨 CLEAR EVERYTHING FOR THIS HOLE", use_container_width=True):
         if worksheet:
-            # Explicitly clearing EVERY column for the 5 players on this hole
+            # Send hardcoded FALSE/0/NONE strings to Cloud
             reset_data = [[p, str(h_idx), "0", "0", "FALSE", "FALSE", "FALSE", "0", "FALSE", "NONE"] for p in PLAYERS]
             start_row = ((h_idx-1)*5)+2
             worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=reset_data)
-            st.warning(f"Hole {h_idx} Reset. All checkboxes unticked."); st.rerun()
+            
+            # CRITICAL: Increment session state ID to force Streamlit to drop old widget values
+            st.session_state.reset_id += 1
+            st.rerun()
 
     h_data = df[df['hole'] == h_idx]
-    with st.form("entry_form"):
+    
+    # We add the reset_id to the FORM key to ensure it resets on clear
+    with st.form(f"entry_form_v{st.session_state.reset_id}"):
         st.info(f"Hole {h_idx} | Par {par_val}")
         updates = []
         for p in PLAYERS:
@@ -174,19 +182,22 @@ with tab3:
 
             st.markdown(f"**{p}**")
             c = st.columns([1, 1, 1, 1, 1, 1, 1, 1.2])
-            s = c[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s_{p}")
-            d = c[1].number_input("Drink", 0, 10, int(p_row['drinks']), key=f"d_{p}")
-            ca = c[2].checkbox("Camo", str(p_row['camo']).upper() == "TRUE", key=f"ca_{p}")
-            th = c[3].checkbox("Thr", str(p_row['throw']).upper() == "TRUE", key=f"th_{p}")
-            ki = c[4].checkbox("Kck", str(p_row['kick']).upper() == "TRUE", key=f"ki_{p}")
-            mu = c[5].number_input("Mly", 0, 1, int(p_row['mully']), key=f"mu_{p}")
-            me = c[6].checkbox("Me2", str(p_row['me2']).upper() == "TRUE", key=f"me_{p}")
+            
+            # Widget Keys now include reset_id to force refresh
+            rid = st.session_state.reset_id
+            s = c[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s_{p}_{rid}")
+            d = c[1].number_input("Drink", 0, 10, int(p_row['drinks']), key=f"d_{p}_{rid}")
+            ca = c[2].checkbox("Camo", str(p_row['camo']).upper() == "TRUE", key=f"ca_{p}_{rid}")
+            th = c[3].checkbox("Thr", str(p_row['throw']).upper() == "TRUE", key=f"th_{p}_{rid}")
+            ki = c[4].checkbox("Kck", str(p_row['kick']).upper() == "TRUE", key=f"ki_{p}_{rid}")
+            mu = c[5].number_input("Mly", 0, 1, int(p_row['mully']), key=f"mu_{p}_{rid}")
+            me = c[6].checkbox("Me2", str(p_row['me2']).upper() == "TRUE", key=f"me_{p}_{rid}")
             
             h_val = "NONE"
             if par_val == 5:
-                if c[7].checkbox("Drive (LD)", str(p_row['honor']).upper() == "D", key=f"hd_{p}"): h_val = "D"
+                if c[7].checkbox("Drive (LD)", str(p_row['honor']).upper() == "D", key=f"hd_{p}_{rid}"): h_val = "D"
             elif par_val == 3:
-                if c[7].checkbox("Pin (CP)", str(p_row['honor']).upper() == "C", key=f"hc_{p}"): h_val = "C"
+                if c[7].checkbox("Pin (CP)", str(p_row['honor']).upper() == "C", key=f"hc_{p}_{rid}"): h_val = "C"
                 
             updates.append([p, str(h_idx), str(s), str(d), str(ca).upper(), str(th).upper(), str(ki).upper(), str(mu), str(me).upper(), h_val])
             
