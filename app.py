@@ -5,49 +5,55 @@ import os
 from google.oauth2.service_account import Credentials
 
 # --- APP CONFIG ---
-st.set_page_config(page_title="Naboomspruit Ope", layout="wide")
+st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
 
-# Initialize Reset Counter
 if 'reset_id' not in st.session_state:
     st.session_state.reset_id = 0
 
-# --- UI STYLING ---
+# --- FULL CSS RESTORATION ---
 st.markdown("""
     <style>
     .main-title { 
         color: #BFFF00; 
-        font-size: 1.8rem; 
+        font-size: 2.2rem; 
         font-weight: 800; 
         text-transform: uppercase; 
         text-align: center;
+        margin-top: 10px; 
         margin-bottom: 20px;
+        letter-spacing: 2px; 
     }
     
-    /* Mobile-Safe Table Container */
-    .scroll-container {
-        width: 100%;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-    }
+    /* Ranking Table Styling */
+    .rank-table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #0F0F0F; }
+    .rank-table th { background-color: #1A1A1A; color: #BFFF00; padding: 15px; text-align: left; border-bottom: 2px solid #333; text-transform: uppercase; font-size: 0.9rem; }
+    .rank-table td { padding: 15px; border-bottom: 1px solid #222; color: #EEE; font-size: 1.1rem; }
+    .rank-1 { color: #FFD700; font-weight: bold; border-left: 5px solid #FFD700; }
+    .pts-highlight { color: #BFFF00; font-weight: 800; font-size: 1.3rem; }
+    .gimme-highlight { color: #00D1FF; font-family: monospace; }
 
-    /* Scorecard Grid */
-    .sc-table { min-width: 800px; border-collapse: collapse; background-color: #0F0F0F; color: #EEE; font-size: 0.75rem; table-layout: fixed; }
-    .sc-table th, .sc-table td { border: 1px solid #333; padding: 8px 2px; text-align: center; }
+    /* Scorecard Grid & Mobile Scroll */
+    .scroll-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .sc-table { min-width: 850px; border-collapse: collapse; background-color: #0F0F0F; color: #EEE; font-size: 0.75rem; table-layout: fixed; }
+    .sc-table th, .sc-table td { border: 1px solid #333; padding: 8px 2px; text-align: center; vertical-align: middle; }
     .sc-table th { background-color: #1A1A1A; color: #BFFF00; font-size: 0.6rem; }
     
-    .player-cell { text-align: left !important; font-weight: bold; background: #151515; width: 95px !important; border-left: 4px solid #BFFF00 !important; padding-left: 5px !important; }
+    .player-cell { text-align: left !important; font-weight: bold; background: #151515; padding-left: 8px !important; width: 95px !important; color: #FFF; border-left: 4px solid #BFFF00 !important; }
     .score-val { font-size: 0.9rem; font-weight: 700; color: #FFF; }
     .pts-val { font-size: 0.85rem; font-weight: 800; color: #BFFF00; }
     
-    .tag-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; margin-top: 4px; }
-    .p-tag { font-size: 0.55rem; font-weight: 900; padding: 1px 3px; border-radius: 2px; border: 1px solid; }
+    .tag-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 5px; min-height: 12px; }
+    .p-tag { font-size: 0.55rem; font-weight: 900; padding: 2px 3px; border-radius: 2px; text-transform: uppercase; line-height: 1; border: 1px solid; }
     
     .t-tag { color: #FF8C00; } .k-tag { color: #FF3E3E; } .m-tag { color: #BF00FF; } 
-    .me-tag { color: #00D1FF; background: rgba(0, 209, 255, 0.1); }
+    .me-tag { color: #00D1FF; background: rgba(0, 209, 255, 0.2); }
     .ld-tag { color: #00FFCC; } .cp-tag { color: #FFCC00; }
     
     .camo-active { background-color: #1E2B00 !important; border: 1px solid #BFFF00 !important; }
-    .total-box { background: #1A1A1A; font-weight: bold; }
+    .total-box { background: #1A1A1A; font-weight: bold; font-size: 0.9rem; }
+    
+    /* Command Tab Badge */
+    .hcp-badge { background: #1A1A1A; color: #BFFF00; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; border: 1px solid #333; margin-left: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -58,7 +64,7 @@ HCP_MAP = {"BENNIE": 36, "ADRIAAN": 33, "DANIE": 33, "MARTIN": 32, "FREDERIK": 3
 COURSE_PAR = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
 COURSE_IDX = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
 
-# --- DATA ENGINE ---
+# --- DATABASE ENGINE ---
 def get_database():
     try:
         s = st.secrets["connections"]["gsheets"]
@@ -69,8 +75,7 @@ def get_database():
         if len(data) < 2: return pd.DataFrame(), ws
         df_cloud = pd.DataFrame(data[1:], columns=['player', 'hole', 'score', 'drinks', 'camo', 'throw', 'kick', 'mully', 'me2', 'honor'])
         return df_cloud, ws
-    except Exception as e:
-        return pd.DataFrame(), None
+    except: return pd.DataFrame(), None
 
 def get_master_df(df_cloud):
     rows = []
@@ -93,44 +98,54 @@ def get_master_df(df_cloud):
     master['player_disp'] = master['player'].map({p.upper(): p for p in PLAYERS})
     return master
 
+def get_strokes_for_hole(player_name, hole_num):
+    hcp = HCP_MAP.get(player_name.upper(), 0)
+    idx = COURSE_IDX[hole_num - 1]
+    return (hcp // 18) + (1 if idx <= (hcp % 18) else 0)
+
 def calculate_points(p_name, h_num, score, camo):
     if score <= 0: return 0
-    h_idx = int(h_num) - 1
-    par = COURSE_PAR[h_idx]
-    hcp = HCP_MAP.get(str(p_name).upper(), 0)
-    strokes = (hcp // 18) + (1 if COURSE_IDX[h_idx] <= (hcp % 18) else 0)
+    par = COURSE_PAR[h_num - 1]
+    strokes = get_strokes_for_hole(p_name, h_num)
     net = score - strokes
     pts = max(0, 2 - (net - par))
     if pts > 0 and par in [3, 5]: pts += 1 
     return pts * 2 if str(camo).upper() == "TRUE" else pts
 
-# --- HEADER ---
-_, mid, _ = st.columns([1, 1, 1])
+# --- HEADER (CENTERED & MOBILE SAFE) ---
+_, mid, _ = st.columns([1, 0.6, 1])
 with mid:
     if os.path.exists(LOCAL_LOGO):
-        st.image(LOCAL_LOGO, width=60)
+        st.image(LOCAL_LOGO, use_container_width=True)
 st.markdown('<div class="main-title">Naboom Nuut: Tactical Open</div>', unsafe_allow_html=True)
 
-# --- APP LOGIC ---
+# --- DATA PROCESSING ---
 df_raw, worksheet = get_database()
 df = get_master_df(df_raw)
 df['pts'] = df.apply(lambda r: calculate_points(r['player'], r['hole'], r['score'], r['camo']), axis=1)
 
-tab1, tab2, tab3, tab4 = st.tabs(["🥇 RANKINGS", "🏆 SCORECARD", "🎒 RUGSAK", "🎯 SCORES"])
+# --- TABS ---
+tab1, tab2, tab3, tab4 = st.tabs(["🥇 RANKINGS", "🏆 SCORECARD", "🎒 ARSENAL", "🎯 COMMAND"])
 
 with tab1:
-    st.subheader("Leaderboard")
-    ranks = []
+    st.subheader("Tournament Standings")
+    rank_data = []
     for p in PLAYERS:
         p_df = df[df['player_disp'] == p]
-        ranks.append({"Player": p, "Points": p_df['pts'].sum(), "Gimme": p_df['drinks'].sum() * 10})
-    lb = pd.DataFrame(ranks).sort_values(by="Points", ascending=False)
-    st.table(lb)
+        rank_data.append({"Player": p, "Points": p_df['pts'].sum(), "Gimme": p_df['drinks'].sum() * 10})
+    lb = pd.DataFrame(rank_data).sort_values(by="Points", ascending=False).reset_index(drop=True)
+    lb.index += 1
+    
+    html = '<table class="rank-table"><tr><th>Rank</th><th>Player</th><th>Total Points</th><th>Gimme Distance</th></tr>'
+    for i, row in lb.iterrows():
+        r_class = "rank-1" if i == 1 else ""
+        html += f'<tr class="{r_class}"><td>{i}</td><td style="font-weight:bold;">{row["Player"]}</td><td class="pts-highlight">{int(row["Points"])}</td><td class="gimme-highlight">📏 {int(row["Gimme"])} cm</td></tr>'
+    st.markdown(html + "</table>", unsafe_allow_html=True)
 
 with tab2:
-    html = '<div class="scroll-container"><table class="sc-table"><tr><th style="width:95px">PLAYER</th>'
-    for h in range(1, 19): html += f'<th>H{h}<br>P{COURSE_PAR[h-1]}</th>'
-    html += '<th class="total-box">TOT</th><th class="total-box">PTS</th></tr>'
+    html = '<div class="scroll-wrapper"><table class="sc-table"><tr><th style="width:95px">PLAYER</th>'
+    for h in range(1, 19): html += f'<th>H{h}<br><span style="color:#666">P{COURSE_PAR[h-1]}</span></th>'
+    html += '<th class="total-box">TOT</th><th class="total-box" style="color:#BFFF00">PTS</th></tr>'
     for p in PLAYERS:
         p_df = df[df['player_disp'] == p].sort_values('hole')
         html += f'<tr><td class="player-cell">{p}</td>'
@@ -151,20 +166,39 @@ with tab2:
     st.markdown(html + "</table></div>", unsafe_allow_html=True)
 
 with tab3:
+    st.subheader("Tactical Inventory")
     inv = []
     for p in PLAYERS:
         p_df = df[df['player_disp'] == p]
-        inv.append({"Player": p, "Gimme": f"{int(p_df['drinks'].sum()) * 10}cm", "Camo": f"{(p_df['camo'].astype(str).str.upper() == 'TRUE').sum()}/2", "Me2": "Used" if (p_df['me2'].astype(str).str.upper() == "TRUE").any() else "Ready"})
+        inv.append({
+            "Player": p, "Gimme": f"📏 {int(p_df['drinks'].sum()) * 10} cm",
+            "Camo Balls": f"Used {(p_df['camo'].astype(str).str.upper() == 'TRUE').sum()} / 2",
+            "Me2": "✅ USED" if (p_df['me2'].astype(str).str.upper() == "TRUE").any() else "READY",
+            "Mullies": f"{int(p_df['mully'].sum())} / 2",
+            "Throws": (p_df['throw'].astype(str).str.upper() == "TRUE").sum(),
+            "Kicks": (p_df['kick'].astype(str).str.upper() == "TRUE").sum()
+        })
     st.table(inv)
 
 with tab4:
-    h_idx = st.selectbox("Hole", range(1, 19))
+    h_idx = st.selectbox("Select Hole", range(1, 19))
+    if st.button("🚨 CLEAR EVERYTHING FOR THIS HOLE", use_container_width=True):
+        if worksheet:
+            reset_data = [[p, str(h_idx), "0", "0", "FALSE", "FALSE", "FALSE", "0", "FALSE", "NONE"] for p in PLAYERS]
+            start_row = ((h_idx-1)*5)+2
+            worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=reset_data)
+            st.session_state.reset_id += 1
+            st.rerun()
+
     h_data = df[df['hole'] == h_idx]
-    with st.form(f"f_{h_idx}_{st.session_state.reset_id}"):
+    with st.form(f"entry_v{h_idx}_{st.session_state.reset_id}"):
+        st.info(f"Hole {h_idx} | Par {COURSE_PAR[h_idx-1]}")
         updates = []
         for p in PLAYERS:
             p_row = h_data[h_data['player'] == p.upper()].iloc[0]
-            st.write(f"**{p}**")
+            strokes = get_strokes_for_hole(p, h_idx)
+            st.markdown(f"**{p}** <span class='hcp-badge'>+{strokes} Strokes</span>", unsafe_allow_html=True)
+            
             c = st.columns(5); rid = st.session_state.reset_id
             s = c[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s_{p}_{rid}")
             d = c[1].number_input("Drink", 0, 10, int(p_row['drinks']), key=f"d_{p}_{rid}")
@@ -179,8 +213,9 @@ with tab4:
             if COURSE_PAR[h_idx-1] == 5 and c2[2].checkbox("LD", str(p_row['honor']).upper() == "D", key=f"ld_{p}_{rid}"): h_v = "D"
             if COURSE_PAR[h_idx-1] == 3 and c2[2].checkbox("CP", str(p_row['honor']).upper() == "C", key=f"cp_{p}_{rid}"): h_v = "C"
             updates.append([p, str(h_idx), str(s), str(d), str(ca).upper(), str(th).upper(), str(ki).upper(), str(mu), str(me).upper(), h_v])
-        if st.form_submit_button("SAVE"):
+            
+        if st.form_submit_button("SAVE HOLE DATA", use_container_width=True):
             if worksheet:
                 start_row = ((h_idx-1)*5)+2
                 worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=updates)
-                st.rerun()
+                st.success("Hole Data Synced!"); st.rerun()
