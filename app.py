@@ -21,8 +21,8 @@ st.markdown("""
     .camo-active { background-color: #1E2B00 !important; border: 1px solid #BFFF00 !important; }
     .power-icon { font-size: 0.5rem; display: block; font-weight: 900; margin-top: 2px; line-height: 1.1; text-transform: uppercase; }
     .t-tag { color: #FF8C00; } .k-tag { color: #FF3E3E; } .m-tag { color: #BF00FF; } .me-tag { color: #00D1FF; }
-    .d-tag { color: #00FFCC; border: 1px solid #00FFCC; padding: 0 1px; border-radius: 2px; } /* Longest Drive */
-    .c-tag { color: #FFCC00; border: 1px solid #FFCC00; padding: 0 1px; border-radius: 2px; } /* Closest Pin */
+    .d-tag { color: #00FFCC; border: 1px solid #00FFCC; padding: 0 1px; border-radius: 2px; font-size: 0.5rem; }
+    .c-tag { color: #FFCC00; border: 1px solid #FFCC00; padding: 0 1px; border-radius: 2px; font-size: 0.5rem; }
     .total-box { background: #1A1A1A; font-weight: bold; font-size: 0.9rem; }
     </style>
     """, unsafe_allow_html=True)
@@ -45,12 +45,10 @@ def get_database():
         if len(data) < 2: return pd.DataFrame(), ws
         df_cloud = pd.DataFrame(data[1:], columns=[c.lower().strip() for c in data[0]])
         return df_cloud, ws
-    except Exception as e:
-        return pd.DataFrame(), None
+    except: return pd.DataFrame(), None
 
 def get_master_df(df_cloud):
     rows = []
-    # New Column 'honor' added for Longest Drive / Closest Pin
     for h in range(1, 19):
         for p in PLAYERS:
             rows.append({"player": p, "hole": h, "score": 0, "drinks": 0, "camo": "FALSE", "throw": "FALSE", "kick": "FALSE", "mully": 0, "me2": "FALSE", "honor": "NONE"})
@@ -83,7 +81,7 @@ def calculate_hole_points(p, h, score, camo):
     h_strokes = (hcp // 18) + (1 if COURSE_IDX[h_idx] <= (hcp % 18) else 0)
     net = score - h_strokes
     pts = max(0, 2 - (net - par))
-    if pts > 0 and par in [3, 5]: pts += 1 # Par 3/5 Bonus
+    if pts > 0 and par in [3, 5]: pts += 1 
     return pts * 2 if str(camo).upper() == "TRUE" else pts
 
 # --- HEADER ---
@@ -110,7 +108,7 @@ with tab1:
             s_disp = int(r['score']) if r['score'] > 0 else "-"
             p_disp = int(r['pts']) if r['score'] > 0 else "-"
             
-            # Honors display
+            # Form tags
             h_tag = ""
             if str(r['honor']).upper() == "D": h_tag = '<span class="d-tag">D</span>'
             if str(r['honor']).upper() == "C": h_tag = '<span class="c-tag">C</span>'
@@ -126,7 +124,7 @@ with tab1:
         html += f'<td class="total-box">{int(p_df["score"].sum())}</td>'
         html += f'<td class="total-box" style="color:#BFFF00">{int(p_df["pts"].sum())}</td></tr>'
     st.markdown(html + "</table>", unsafe_allow_html=True)
-    st.caption("Legend: T=Throw | K=Kick | M=Mully | ME=Me2 | D=Longest Drive | C=Closest Pin")
+    st.caption("T=Throw | K=Kick | M=Mully | ME=Me2 | D=Longest Drive | C=Closest Pin")
 
 with tab2:
     st.subheader("Tactical Resource Inventory")
@@ -147,40 +145,44 @@ with tab2:
 
 with tab3:
     h_idx = st.selectbox("Select Hole", range(1, 19))
-    h_data = df[df['hole'] == h_idx]
     par_val = COURSE_PAR[h_idx-1]
     
+    # --- CLEAR BUTTON ---
+    if st.button("🚨 CLEAR ALL DATA FOR THIS HOLE"):
+        if worksheet:
+            blank = [[p, h_idx, "0", "0", "FALSE", "FALSE", "FALSE", "0", "FALSE", "NONE"] for p in PLAYERS]
+            start_row = ((h_idx - 1) * 5) + 2
+            worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=blank)
+            st.warning(f"Hole {h_idx} Cleared!"); st.rerun()
+
+    h_data = df[df['hole'] == h_idx]
     with st.form("hole_entry"):
-        st.info(f"Hole {h_idx} | Par {par_val} | Index {COURSE_IDX[h_idx-1]}")
+        st.info(f"Hole {h_idx} | Par {par_val}")
         updates = []
         for p in PLAYERS:
             p_row = h_data[h_data['player'] == p].iloc[0]
             h_strokes = (HCP_MAP[p] // 18) + (1 if COURSE_IDX[h_idx-1] <= (HCP_MAP[p] % 18) else 0)
             st.markdown(f"**{p}** (+{h_strokes} strokes)")
             
-            # Layout with 8 columns to accommodate the Honor checkbox
-            cols = st.columns([1, 1, 1, 1, 1, 1, 1, 1.2])
-            s = cols[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s{p}")
-            d = cols[1].number_input("Drink", 0, 10, int(pd.to_numeric(p_row['drinks'] or 0)), key=f"d{p}")
-            ca = cols[2].checkbox("Camo", str(p_row['camo']).upper() == "TRUE", key=f"ca{p}")
-            th = cols[3].checkbox("Thr", str(p_row['throw']).upper() == "TRUE", key=f"th{p}")
-            ki = cols[4].checkbox("Kck", str(p_row['kick']).upper() == "TRUE", key=f"ki{p}")
-            mu = cols[5].number_input("Mly", 0, 1, int(pd.to_numeric(p_row['mully'] or 0)), key=f"mu{p}")
-            me = cols[6].checkbox("Me2", str(p_row['me2']).upper() == "TRUE", key=f"me{p}")
+            c = st.columns([1, 1, 1, 1, 1, 1, 1, 1.2])
+            s = c[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s{p}")
+            d = c[1].number_input("Drink", 0, 10, int(pd.to_numeric(p_row['drinks'] or 0)), key=f"d{p}")
+            ca = c[2].checkbox("Camo", str(p_row['camo']).upper() == "TRUE", key=f"ca{p}")
+            th = c[3].checkbox("Thr", str(p_row['throw']).upper() == "TRUE", key=f"th{p}")
+            ki = c[4].checkbox("Kck", str(p_row['kick']).upper() == "TRUE", key=f"ki{p}")
+            mu = c[5].number_input("Mly", 0, 1, int(pd.to_numeric(p_row['mully'] or 0)), key=f"mu{p}")
+            me = c[6].checkbox("Me2", str(p_row['me2']).upper() == "TRUE", key=f"me{p}")
             
-            # Logic for Longest Drive (Par 5) or Closest Pin (Par 3)
-            honor_val = "NONE"
+            h_val = "NONE"
             if par_val == 5:
-                if cols[7].checkbox("Drive (D)", str(p_row['honor']).upper() == "D", key=f"honor{p}"): honor_val = "D"
+                if c[7].checkbox("Drive (D)", str(p_row['honor']).upper() == "D", key=f"h{p}"): h_val = "D"
             elif par_val == 3:
-                if cols[7].checkbox("Pin (C)", str(p_row['honor']).upper() == "C", key=f"honor{p}"): honor_val = "C"
-            else:
-                cols[7].write("---") # Par 4s have no special honor
+                if c[7].checkbox("Pin (C)", str(p_row['honor']).upper() == "C", key=f"h{p}"): h_val = "C"
                 
-            updates.append([p, h_idx, str(s), str(d), str(ca).upper(), str(th).upper(), str(ki).upper(), str(mu), str(me).upper(), honor_val])
+            updates.append([p, h_idx, str(s), str(d), str(ca).upper(), str(th).upper(), str(ki).upper(), str(mu), str(me).upper(), h_val])
             
         if st.form_submit_button(f"SAVE HOLE {h_idx}"):
             if worksheet:
                 start_row = ((h_idx - 1) * 5) + 2
                 worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=updates)
-                st.success(f"Hole {h_idx} Updated."); st.rerun()
+                st.success(f"Hole {h_idx} Synced!"); st.rerun()
