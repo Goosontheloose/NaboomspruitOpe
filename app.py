@@ -14,8 +14,16 @@ if 'reset_id' not in st.session_state:
 # --- UI STYLING ---
 st.markdown("""
     <style>
-    .header-container { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin-bottom: 20px; }
-    .main-title { color: #BFFF00; font-size: 2.2rem; font-weight: 800; text-transform: uppercase; margin-top: 10px; letter-spacing: 2px; }
+    .main-title { 
+        color: #BFFF00; 
+        font-size: 2.2rem; 
+        font-weight: 800; 
+        text-transform: uppercase; 
+        text-align: center;
+        margin-top: -10px; 
+        margin-bottom: 20px;
+        letter-spacing: 2px; 
+    }
     
     /* Ranking Table Styling */
     .rank-table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #0F0F0F; }
@@ -105,13 +113,16 @@ def calculate_points(p_name, h_num, score, camo):
     if pts > 0 and par in [3, 5]: pts += 1 
     return pts * 2 if str(camo).upper() == "TRUE" else pts
 
-# --- HEADER LOGIC ---
-st.markdown('<div class="header-container">', unsafe_allow_html=True)
+# --- HEADER (CENTERED) ---
 if os.path.exists(LOCAL_LOGO):
-    st.image(LOCAL_LOGO, width=150)
-st.markdown('<div class="main-title">Naboom Nuut: Tactical Open</div></div>', unsafe_allow_html=True)
+    # Use columns to force the image to the center
+    _, col_img, _ = st.columns([1, 0.6, 1])
+    with col_img:
+        st.image(LOCAL_LOGO, use_container_width=True)
 
-# --- APP FLOW ---
+st.markdown('<div class="main-title">Naboom Nuut: Tactical Open</div>', unsafe_allow_html=True)
+
+# --- APP DATA FLOW ---
 df_raw, worksheet = get_database()
 df = get_master_df(df_raw)
 df['pts'] = df.apply(lambda r: calculate_points(r['player'], r['hole'], r['score'], r['camo']), axis=1)
