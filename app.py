@@ -5,7 +5,7 @@ import os
 from google.oauth2.service_account import Credentials
 
 # --- APP CONFIG ---
-st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
+st.set_page_config(page_title="Naboomspruit Ope", layout="wide")
 
 if 'reset_id' not in st.session_state:
     st.session_state.reset_id = 0
@@ -117,7 +117,7 @@ _, mid, _ = st.columns([1, 0.6, 1])
 with mid:
     if os.path.exists(LOCAL_LOGO):
         st.image(LOCAL_LOGO, use_container_width=True)
-st.markdown('<div class="main-title">Naboom Nuut: Tactical Open</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">Naboomspruit Ope</div>', unsafe_allow_html=True)
 
 # --- DATA PROCESSING ---
 df_raw, worksheet = get_database()
@@ -125,7 +125,7 @@ df = get_master_df(df_raw)
 df['pts'] = df.apply(lambda r: calculate_points(r['player'], r['hole'], r['score'], r['camo']), axis=1)
 
 # --- TABS ---
-tab1, tab2, tab3, tab4 = st.tabs(["🥇 RANKINGS", "🏆 SCORECARD", "🎒 ARSENAL", "🎯 COMMAND"])
+tab1, tab2, tab3, tab4 = st.tabs(["🥇 RANKINGS", "🏆 SCORECARD", "🎒 RUGSAK", "🎯 SCORES"])
 
 with tab1:
     st.subheader("Tournament Standings")
@@ -166,7 +166,7 @@ with tab2:
     st.markdown(html + "</table></div>", unsafe_allow_html=True)
 
 with tab3:
-    st.subheader("Tactical Inventory")
+    st.subheader("Taktiese Rugsak")
     inv = []
     for p in PLAYERS:
         p_df = df[df['player_disp'] == p]
