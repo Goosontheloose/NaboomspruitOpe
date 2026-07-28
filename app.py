@@ -20,10 +20,12 @@ st.markdown("""
     .divider { color: #444; margin: 0 2px; }
     .camo-active { background-color: #1E2B00 !important; border: 1px solid #BFFF00 !important; }
     .power-icon { font-size: 0.5rem; display: block; font-weight: 900; margin-top: 2px; line-height: 1.1; text-transform: uppercase; }
-    .t-tag { color: #FF8C00; } .k-tag { color: #FF3E3E; } .m-tag { color: #BF00FF; } .me-tag { color: #00D1FF; }
+    .t-tag { color: #FF8C00; } .k-tag { color: #FF3E3E; } .m-tag { color: #BF00FF; } 
+    .me-tag { color: #00D1FF; border: 1px solid #00D1FF; border-radius: 2px; margin-top:1px; }
     .d-tag { color: #00FFCC; border: 1px solid #00FFCC; padding: 0 1px; border-radius: 2px; font-size: 0.5rem; }
     .c-tag { color: #FFCC00; border: 1px solid #FFCC00; padding: 0 1px; border-radius: 2px; font-size: 0.5rem; }
     .total-box { background: #1A1A1A; font-weight: bold; font-size: 0.9rem; }
+    .clear-btn { background-color: #330000 !important; color: #FF4B4B !important; border: 1px solid #FF4B4B !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -48,6 +50,7 @@ def get_database():
     except: return pd.DataFrame(), None
 
 def get_master_df(df_cloud):
+    # Core Skeleton
     rows = []
     for h in range(1, 19):
         for p in PLAYERS:
@@ -60,31 +63,40 @@ def get_master_df(df_cloud):
         df_cloud['hole'] = df_cloud['hole'].astype(str)
         df_cloud['player'] = df_cloud['player'].astype(str).str.strip().str.upper()
         
+        # Merge safely
         master = master.merge(df_cloud, on=['player', 'hole'], how='left', suffixes=('', '_c'))
+        
+        # List of tactical columns to pull from cloud
         cols = ['score', 'drinks', 'camo', 'throw', 'kick', 'mully', 'me2', 'honor']
         for col in cols:
-            if f"{col}_c" in master.columns:
-                master[col] = master[f"{col}_c"].combine_first(master[col])
+            cloud_col = f"{col}_c"
+            if cloud_col in master.columns:
+                master[col] = master[cloud_col].combine_first(master[col])
+        
         master = master[["player", "hole"] + cols]
 
+    # Clean data types for math and display
     master['score'] = pd.to_numeric(master['score'], errors='coerce').fillna(0).astype(int)
     master['hole'] = pd.to_numeric(master['hole']).astype(int)
+    master['mully'] = pd.to_numeric(master['mully'], errors='coerce').fillna(0).astype(int)
+    
+    # Restore name casing
     name_map = {p.upper(): p for p in PLAYERS}
     master['player'] = master['player'].map(name_map)
     return master
 
-def calculate_hole_points(p, h, score, camo):
-    if score == 0: return 0
+def calculate_points(p, h, score, camo):
+    if score <= 0: return 0
     h_idx = int(h) - 1
     par = COURSE_PAR[h_idx]
     hcp = HCP_MAP.get(p, 0)
-    h_strokes = (hcp // 18) + (1 if COURSE_IDX[h_idx] <= (hcp % 18) else 0)
-    net = score - h_strokes
+    strokes = (hcp // 18) + (1 if COURSE_IDX[h_idx] <= (hcp % 18) else 0)
+    net = score - strokes
     pts = max(0, 2 - (net - par))
-    if pts > 0 and par in [3, 5]: pts += 1 
+    if pts > 0 and par in [3, 5]: pts += 1 # Par 3/5 Bonus
     return pts * 2 if str(camo).upper() == "TRUE" else pts
 
-# --- HEADER ---
+# --- MAIN UI ---
 st.markdown(f'<div class="header-container"><img src="{LOGO_URL}" width="120"><div class="main-title">Naboom Nuut: Tactical Open</div></div>', unsafe_allow_html=True)
 
 df_raw, worksheet = get_database()
@@ -93,7 +105,8 @@ df = get_master_df(df_raw)
 tab1, tab2, tab3 = st.tabs(["🏆 LIVE SCORECARD", "🎒 THE ARSENAL", "🎯 HOLE COMMAND"])
 
 with tab1:
-    df['pts'] = df.apply(lambda r: calculate_hole_points(r['player'], r['hole'], r['score'], r['camo']), axis=1)
+    df['pts'] = df.apply(lambda r: calculate_points(r['player'], r['hole'], r['score'], r['camo']), axis=1)
+    
     html = '<table class="sc-table"><tr><th style="width:90px">PLAYER</th>'
     for h in range(1, 19):
         html += f'<th>H{h}<br><span style="color:#666; font-size:0.6rem">P{COURSE_PAR[h-1]}</span></th>'
@@ -105,10 +118,11 @@ with tab1:
         for _, r in p_df.iterrows():
             is_camo = str(r['camo']).upper() == "TRUE"
             cls = "camo-active" if is_camo else ""
-            s_disp = int(r['score']) if r['score'] > 0 else "-"
-            p_disp = int(r['pts']) if r['score'] > 0 else "-"
             
-            # Form tags
+            s_val = int(r['score']) if r['score'] > 0 else "-"
+            p_val = int(r['pts']) if r['score'] > 0 else "-"
+            
+            # Tags Logic
             h_tag = ""
             if str(r['honor']).upper() == "D": h_tag = '<span class="d-tag">D</span>'
             if str(r['honor']).upper() == "C": h_tag = '<span class="c-tag">C</span>'
@@ -116,11 +130,12 @@ with tab1:
             tags = "".join([
                 f'<span class="power-icon t-tag">T</span>' if str(r['throw']).upper() == "TRUE" else "",
                 f'<span class="power-icon k-tag">K</span>' if str(r['kick']).upper() == "TRUE" else "",
-                f'<span class="power-icon m-tag">M</span>' if int(pd.to_numeric(r['mully'] or 0)) > 0 else "",
+                f'<span class="power-icon m-tag">M</span>' if r['mully'] > 0 else "",
                 f'<span class="power-icon me-tag">ME</span>' if str(r['me2']).upper() == "TRUE" else "",
                 h_tag
             ])
-            html += f'<td class="{cls}"><span class="score-val">{s_disp}</span><span class="divider">|</span><span class="pts-val">{p_disp}</span>{tags}</td>'
+            html += f'<td class="{cls}"><span class="score-val">{s_val}</span><span class="divider">|</span><span class="pts-val">{p_val}</span>{tags}</td>'
+        
         html += f'<td class="total-box">{int(p_df["score"].sum())}</td>'
         html += f'<td class="total-box" style="color:#BFFF00">{int(p_df["pts"].sum())}</td></tr>'
     st.markdown(html + "</table>", unsafe_allow_html=True)
@@ -135,7 +150,7 @@ with tab2:
             "Player": p,
             "Camo Ball": "✅ USED" if (p_df['camo'].astype(str).str.upper() == "TRUE").any() else "READY",
             "Me2": "✅ USED" if (p_df['me2'].astype(str).str.upper() == "TRUE").any() else "READY",
-            "Mullies": f"{int(pd.to_numeric(p_df['mully']).sum())} / 2",
+            "Mullies": f"{int(p_df['mully'].sum())} / 2",
             "Throws": (p_df['throw'].astype(str).str.upper() == "TRUE").sum(),
             "Kicks": (p_df['kick'].astype(str).str.upper() == "TRUE").sum(),
             "Drives (D)": (p_df['honor'].astype(str).str.upper() == "D").sum(),
@@ -147,37 +162,38 @@ with tab3:
     h_idx = st.selectbox("Select Hole", range(1, 19))
     par_val = COURSE_PAR[h_idx-1]
     
-    # --- CLEAR BUTTON ---
-    if st.button("🚨 CLEAR ALL DATA FOR THIS HOLE"):
+    # --- HARD CLEAR BUTTON ---
+    if st.button("🚨 CLEAR ALL DATA FOR THIS HOLE", use_container_width=True):
         if worksheet:
-            blank = [[p, h_idx, "0", "0", "FALSE", "FALSE", "FALSE", "0", "FALSE", "NONE"] for p in PLAYERS]
+            # Generate blank row data: Player, Hole, Score, Drink, Camo, Thr, Kck, Mly, Me2, Honor
+            blank_rows = [[p, h_idx, "0", "0", "FALSE", "FALSE", "FALSE", "0", "FALSE", "NONE"] for p in PLAYERS]
             start_row = ((h_idx - 1) * 5) + 2
-            worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=blank)
-            st.warning(f"Hole {h_idx} Cleared!"); st.rerun()
+            worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=blank_rows)
+            st.warning(f"Hole {h_idx} Reset to zero."); st.rerun()
 
     h_data = df[df['hole'] == h_idx]
-    with st.form("hole_entry"):
-        st.info(f"Hole {h_idx} | Par {par_val}")
+    with st.form("hole_entry_form"):
+        st.info(f"Recording Hole {h_idx} | Par {par_val}")
         updates = []
         for p in PLAYERS:
+            # Safe data extraction
             p_row = h_data[h_data['player'] == p].iloc[0]
-            h_strokes = (HCP_MAP[p] // 18) + (1 if COURSE_IDX[h_idx-1] <= (HCP_MAP[p] % 18) else 0)
-            st.markdown(f"**{p}** (+{h_strokes} strokes)")
+            st.markdown(f"**{p}**")
             
             c = st.columns([1, 1, 1, 1, 1, 1, 1, 1.2])
-            s = c[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s{p}")
-            d = c[1].number_input("Drink", 0, 10, int(pd.to_numeric(p_row['drinks'] or 0)), key=f"d{p}")
-            ca = c[2].checkbox("Camo", str(p_row['camo']).upper() == "TRUE", key=f"ca{p}")
-            th = c[3].checkbox("Thr", str(p_row['throw']).upper() == "TRUE", key=f"th{p}")
-            ki = c[4].checkbox("Kck", str(p_row['kick']).upper() == "TRUE", key=f"ki{p}")
-            mu = c[5].number_input("Mly", 0, 1, int(pd.to_numeric(p_row['mully'] or 0)), key=f"mu{p}")
-            me = c[6].checkbox("Me2", str(p_row['me2']).upper() == "TRUE", key=f"me{p}")
+            s = c[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s_{p}")
+            d = c[1].number_input("Drink", 0, 10, int(p_row['drinks']), key=f"d_{p}")
+            ca = c[2].checkbox("Camo", str(p_row['camo']).upper() == "TRUE", key=f"ca_{p}")
+            th = c[3].checkbox("Thr", str(p_row['throw']).upper() == "TRUE", key=f"th_{p}")
+            ki = c[4].checkbox("Kck", str(p_row['kick']).upper() == "TRUE", key=f"ki_{p}")
+            mu = c[5].number_input("Mly", 0, 1, int(p_row['mully']), key=f"mu_{p}")
+            me = c[6].checkbox("Me2", str(p_row['me2']).upper() == "TRUE", key=f"me_{p}")
             
             h_val = "NONE"
             if par_val == 5:
-                if c[7].checkbox("Drive (D)", str(p_row['honor']).upper() == "D", key=f"h{p}"): h_val = "D"
+                if c[7].checkbox("Drive (D)", str(p_row['honor']).upper() == "D", key=f"hd_{p}"): h_val = "D"
             elif par_val == 3:
-                if c[7].checkbox("Pin (C)", str(p_row['honor']).upper() == "C", key=f"h{p}"): h_val = "C"
+                if c[7].checkbox("Pin (C)", str(p_row['honor']).upper() == "C", key=f"hc_{p}"): h_val = "C"
                 
             updates.append([p, h_idx, str(s), str(d), str(ca).upper(), str(th).upper(), str(ki).upper(), str(mu), str(me).upper(), h_val])
             
@@ -185,4 +201,4 @@ with tab3:
             if worksheet:
                 start_row = ((h_idx - 1) * 5) + 2
                 worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=updates)
-                st.success(f"Hole {h_idx} Synced!"); st.rerun()
+                st.success(f"Hole {h_idx} Saved!"); st.rerun()
