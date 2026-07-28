@@ -12,30 +12,28 @@ st.markdown("""
     .header-container { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; margin-bottom: 20px; }
     .main-title { color: #BFFF00; font-size: 2.2rem; font-weight: 800; text-transform: uppercase; margin-top: 10px; letter-spacing: 2px; }
     
-    /* Scorecard Grid */
     .sc-table { width: 100%; border-collapse: collapse; background-color: #0F0F0F; color: #EEE; font-size: 0.75rem; table-layout: fixed; }
-    .sc-table th, .sc-table td { border: 1px solid #333; padding: 6px 2px; text-align: center; vertical-align: middle; }
-    .sc-table th { background-color: #1A1A1A; color: #BFFF00; font-size: 0.6rem; line-height: 1.2; }
+    .sc-table th, .sc-table td { border: 1px solid #333; padding: 8px 2px; text-align: center; vertical-align: middle; }
+    .sc-table th { background-color: #1A1A1A; color: #BFFF00; font-size: 0.6rem; }
     
-    .player-cell { text-align: left !important; font-weight: bold; background: #151515; padding-left: 8px !important; width: 90px !important; color: #FFF; border-left: 4px solid #BFFF00 !important; }
+    .player-cell { text-align: left !important; font-weight: bold; background: #151515; padding-left: 8px !important; width: 95px !important; color: #FFF; border-left: 4px solid #BFFF00 !important; }
+    .score-val { font-size: 0.9rem; font-weight: 700; color: #FFF; }
+    .pts-val { font-size: 0.85rem; font-weight: 800; color: #BFFF00; }
+    .divider { color: #555; margin: 0 3px; }
     
-    .score-val { font-size: 0.85rem; font-weight: 700; color: #FFF; }
-    .pts-val { font-size: 0.8rem; font-weight: 800; color: #BFFF00; }
-    .divider { color: #444; margin: 0 2px; }
-    
-    /* Powerup Tags - Fixed for ME visibility */
-    .tag-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; margin-top: 3px; }
-    .p-tag { font-size: 0.5rem; font-weight: 900; padding: 1px 2px; border-radius: 2px; text-transform: uppercase; line-height: 1; }
+    /* Tags styling */
+    .tag-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 5px; min-height: 12px; }
+    .p-tag { font-size: 0.55rem; font-weight: 900; padding: 2px 3px; border-radius: 2px; text-transform: uppercase; line-height: 1; }
     
     .t-tag { color: #FF8C00; border: 1px solid #FF8C00; } 
     .k-tag { color: #FF3E3E; border: 1px solid #FF3E3E; } 
     .m-tag { color: #BF00FF; border: 1px solid #BF00FF; } 
-    .me-tag { color: #00D1FF; border: 1px solid #00D1FF; background: rgba(0, 209, 255, 0.2); display: inline-block !important; }
-    .d-tag { color: #00FFCC; border: 1px solid #00FFCC; background: rgba(0, 255, 204, 0.1); }
-    .c-tag { color: #FFCC00; border: 1px solid #FFCC00; background: rgba(255, 204, 0, 0.1); }
+    .me-tag { color: #00D1FF; border: 1px solid #00D1FF; background: rgba(0, 209, 255, 0.2); }
+    .ld-tag { color: #00FFCC; border: 1px solid #00FFCC; background: rgba(0, 255, 204, 0.2); }
+    .cp-tag { color: #FFCC00; border: 1px solid #FFCC00; background: rgba(255, 204, 0, 0.2); }
     
     .camo-active { background-color: #1E2B00 !important; border: 1px solid #BFFF00 !important; }
-    .total-box { background: #1A1A1A; font-weight: bold; font-size: 0.85rem; }
+    .total-box { background: #1A1A1A; font-weight: bold; font-size: 0.9rem; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -46,7 +44,7 @@ HCP_MAP = {"BENNIE": 36, "ADRIAAN": 33, "DANIE": 33, "MARTIN": 32, "FREDERIK": 3
 COURSE_PAR = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
 COURSE_IDX = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
 
-# --- DATA ENGINE ---
+# --- DATA ENGINE (POSITION BASED) ---
 def get_database():
     try:
         s = st.secrets["connections"]["gsheets"]
@@ -55,11 +53,14 @@ def get_database():
         ws = client.open_by_key(s["spreadsheet"].strip()).get_worksheet(0)
         data = ws.get_all_values()
         if len(data) < 2: return pd.DataFrame(), ws
-        df_cloud = pd.DataFrame(data[1:], columns=[c.lower().strip() for c in data[0]])
+        
+        # We assume 10 columns: A(Player), B(Hole), C(Score), D(Drink), E(Camo), F(Throw), G(Kick), H(Mully), I(Me2), J(Honor)
+        df_cloud = pd.DataFrame(data[1:], columns=['player', 'hole', 'score', 'drinks', 'camo', 'throw', 'kick', 'mully', 'me2', 'honor'])
         return df_cloud, ws
     except: return pd.DataFrame(), None
 
 def get_master_df(df_cloud):
+    # Create local skeleton
     rows = []
     for h in range(1, 19):
         for p in PLAYERS:
@@ -69,6 +70,8 @@ def get_master_df(df_cloud):
     if not df_cloud.empty:
         df_cloud['player'] = df_cloud['player'].astype(str).str.strip().str.upper()
         df_cloud['hole'] = df_cloud['hole'].astype(str).str.strip()
+        
+        # Merge by position
         master = master.merge(df_cloud, on=['player', 'hole'], how='left', suffixes=('', '_c'))
         
         cols = ['score', 'drinks', 'camo', 'throw', 'kick', 'mully', 'me2', 'honor']
@@ -77,6 +80,7 @@ def get_master_df(df_cloud):
                 master[col] = master[f"{col}_c"].combine_first(master[col])
         master = master[["player", "hole"] + cols]
 
+    # Type enforcement
     master['score'] = pd.to_numeric(master['score'], errors='coerce').fillna(0).astype(int)
     master['hole'] = pd.to_numeric(master['hole']).astype(int)
     master['mully'] = pd.to_numeric(master['mully'], errors='coerce').fillna(0).astype(int)
@@ -104,7 +108,7 @@ tab1, tab2, tab3 = st.tabs(["🏆 LIVE SCORECARD", "🎒 THE ARSENAL", "🎯 HOL
 
 with tab1:
     df['pts'] = df.apply(lambda r: calculate_points(r['player'], r['hole'], r['score'], r['camo']), axis=1)
-    html = '<table class="sc-table"><tr><th style="width:90px">PLAYER</th>'
+    html = '<table class="sc-table"><tr><th style="width:95px">PLAYER</th>'
     for h in range(1, 19):
         html += f'<th>H{h}<br><span style="color:#666">P{COURSE_PAR[h-1]}</span></th>'
     html += '<th class="total-box">TOT</th><th class="total-box" style="color:#BFFF00">PTS</th></tr>'
@@ -116,14 +120,14 @@ with tab1:
             is_camo = str(r['camo']).upper() == "TRUE"
             is_me2 = str(r['me2']).upper() == "TRUE"
             
-            # Tags
+            # Tags Logic
             tags = []
             if str(r['throw']).upper() == "TRUE": tags.append('<span class="p-tag t-tag">T</span>')
             if str(r['kick']).upper() == "TRUE": tags.append('<span class="p-tag k-tag">K</span>')
             if int(r['mully']) > 0: tags.append('<span class="p-tag m-tag">M</span>')
             if is_me2: tags.append('<span class="p-tag me-tag">ME</span>')
-            if str(r['honor']).upper() == "D": tags.append('<span class="p-tag d-tag">D</span>')
-            if str(r['honor']).upper() == "C": tags.append('<span class="p-tag c-tag">C</span>')
+            if str(r['honor']).upper() == "D": tags.append('<span class="p-tag ld-tag">LD</span>')
+            if str(r['honor']).upper() == "C": tags.append('<span class="p-tag cp-tag">CP</span>')
             
             tag_html = f'<div class="tag-container">{"".join(tags)}</div>' if tags else ""
             s_val = int(r['score']) if r['score'] > 0 else "-"
@@ -146,11 +150,11 @@ with tab2:
         inv.append({
             "Player": p,
             "Camo Balls": f"Used {camo_used} / 2",
-            "Camo Status": "✅ READY" if camo_used < 2 else "❌ EMPTY",
             "Me2": "✅ USED" if me2_used else "READY",
             "Mullies": f"{int(p_df['mully'].sum())} / 2",
             "Throws": (p_df['throw'].astype(str).str.upper() == "TRUE").sum(),
-            "Kicks": (p_df['kick'].astype(str).str.upper() == "TRUE").sum()
+            "Kicks": (p_df['kick'].astype(str).str.upper() == "TRUE").sum(),
+            "Long Drives": (p_df['honor'].astype(str).str.upper() == "D").sum()
         })
     st.table(inv)
 
@@ -165,7 +169,7 @@ with tab3:
             st.rerun()
 
     h_data = df[df['hole'] == h_idx]
-    with st.form("entry"):
+    with st.form("entry_form"):
         st.info(f"Hole {h_idx} | Par {par_val}")
         updates = []
         for p in PLAYERS:
@@ -184,9 +188,9 @@ with tab3:
             
             h_val = "NONE"
             if par_val == 5:
-                if c[7].checkbox("Drive", str(p_row['honor']).upper() == "D", key=f"hd_{p}"): h_val = "D"
+                if c[7].checkbox("Drive (LD)", str(p_row['honor']).upper() == "D", key=f"hd_{p}"): h_val = "D"
             elif par_val == 3:
-                if c[7].checkbox("Pin", str(p_row['honor']).upper() == "C", key=f"hc_{p}"): h_val = "C"
+                if c[7].checkbox("Pin (CP)", str(p_row['honor']).upper() == "C", key=f"hc_{p}"): h_val = "C"
                 
             updates.append([p, str(h_idx), str(s), str(d), str(ca).upper(), str(th).upper(), str(ki).upper(), str(mu), str(me).upper(), h_val])
             
