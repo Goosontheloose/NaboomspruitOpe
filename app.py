@@ -21,14 +21,12 @@ st.markdown("""
     .pts-val { font-size: 0.85rem; font-weight: 800; color: #BFFF00; }
     .divider { color: #555; margin: 0 3px; }
     
-    /* Powerup Tags Styling */
     .tag-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 5px; min-height: 12px; }
     .p-tag { font-size: 0.55rem; font-weight: 900; padding: 2px 3px; border-radius: 2px; text-transform: uppercase; line-height: 1; }
     
     .t-tag { color: #FF8C00; border: 1px solid #FF8C00; } 
     .k-tag { color: #FF3E3E; border: 1px solid #FF3E3E; } 
     .m-tag { color: #BF00FF; border: 1px solid #BF00FF; } 
-    .camo-tag { color: #BFFF00; border: 1px solid #BFFF00; background: rgba(191, 255, 0, 0.2); }
     .me-tag { color: #00D1FF; border: 1px solid #00D1FF; background: rgba(0, 209, 255, 0.2); }
     .ld-tag { color: #00FFCC; border: 1px solid #00FFCC; background: rgba(0, 255, 204, 0.2); }
     .cp-tag { color: #FFCC00; border: 1px solid #FFCC00; background: rgba(255, 204, 0, 0.2); }
@@ -45,7 +43,7 @@ HCP_MAP = {"BENNIE": 36, "ADRIAAN": 33, "DANIE": 33, "MARTIN": 32, "FREDERIK": 3
 COURSE_PAR = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
 COURSE_IDX = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
 
-# --- DATA ENGINE (POSITION BASED) ---
+# --- DATA ENGINE ---
 def get_database():
     try:
         s = st.secrets["connections"]["gsheets"]
@@ -54,7 +52,6 @@ def get_database():
         ws = client.open_by_key(s["spreadsheet"].strip()).get_worksheet(0)
         data = ws.get_all_values()
         if len(data) < 2: return pd.DataFrame(), ws
-        # Mapping by Column Index: A, B, C, D, E, F, G, H, I, J
         df_cloud = pd.DataFrame(data[1:], columns=['player', 'hole', 'score', 'drinks', 'camo', 'throw', 'kick', 'mully', 'me2', 'honor'])
         return df_cloud, ws
     except: return pd.DataFrame(), None
@@ -77,6 +74,7 @@ def get_master_df(df_cloud):
         master = master[["player", "hole"] + cols]
 
     master['score'] = pd.to_numeric(master['score'], errors='coerce').fillna(0).astype(int)
+    master['drinks'] = pd.to_numeric(master['drinks'], errors='coerce').fillna(0).astype(int)
     master['hole'] = pd.to_numeric(master['hole']).astype(int)
     master['mully'] = pd.to_numeric(master['mully'], errors='coerce').fillna(0).astype(int)
     master['player_disp'] = master['player'].map({p.upper(): p for p in PLAYERS})
@@ -115,9 +113,7 @@ with tab1:
             is_camo = str(r['camo']).upper() == "TRUE"
             is_me2 = str(r['me2']).upper() == "TRUE"
             
-            # Tags Logic
             tags = []
-            if is_camo: tags.append('<span class="p-tag camo-tag">C</span>')
             if str(r['throw']).upper() == "TRUE": tags.append('<span class="p-tag t-tag">T</span>')
             if str(r['kick']).upper() == "TRUE": tags.append('<span class="p-tag k-tag">K</span>')
             if int(r['mully']) > 0: tags.append('<span class="p-tag m-tag">M</span>')
@@ -142,9 +138,11 @@ with tab2:
         p_df = df[df['player_disp'] == p]
         camo_used = (p_df['camo'].astype(str).str.upper() == "TRUE").sum()
         me2_used = (p_df['me2'].astype(str).str.upper() == "TRUE").any()
+        total_drinks = int(p_df['drinks'].sum())
         
         inv.append({
             "Player": p,
+            "Gimme Distance": f"📏 {total_drinks * 10} cm",
             "Camo Balls": f"Used {camo_used} / 2",
             "Me2": "✅ USED" if me2_used else "READY",
             "Mullies": f"{int(p_df['mully'].sum())} / 2",
@@ -157,11 +155,14 @@ with tab3:
     h_idx = st.selectbox("Select Hole", range(1, 19))
     par_val = COURSE_PAR[h_idx-1]
     
-    if st.button("🚨 RESET HOLE DATA", use_container_width=True):
+    # --- HARD RESET ---
+    if st.button("🚨 CLEAR EVERYTHING FOR THIS HOLE", use_container_width=True):
         if worksheet:
-            reset = [[p, str(h_idx), "0", "0", "FALSE", "FALSE", "FALSE", "0", "FALSE", "NONE"] for p in PLAYERS]
-            worksheet.update(range_name=f"A{((h_idx-1)*5)+2}:J{((h_idx-1)*5)+6}", values=reset)
-            st.rerun()
+            # Explicitly clearing EVERY column for the 5 players on this hole
+            reset_data = [[p, str(h_idx), "0", "0", "FALSE", "FALSE", "FALSE", "0", "FALSE", "NONE"] for p in PLAYERS]
+            start_row = ((h_idx-1)*5)+2
+            worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=reset_data)
+            st.warning(f"Hole {h_idx} Reset. All checkboxes unticked."); st.rerun()
 
     h_data = df[df['hole'] == h_idx]
     with st.form("entry_form"):
@@ -191,5 +192,6 @@ with tab3:
             
         if st.form_submit_button(f"SAVE HOLE {h_idx}"):
             if worksheet:
-                worksheet.update(range_name=f"A{((h_idx-1)*5)+2}:J{((h_idx-1)*5)+6}", values=updates)
+                start_row = ((h_idx-1)*5)+2
+                worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=updates)
                 st.success("Synced!"); st.rerun()
