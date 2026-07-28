@@ -21,13 +21,14 @@ st.markdown("""
     .pts-val { font-size: 0.85rem; font-weight: 800; color: #BFFF00; }
     .divider { color: #555; margin: 0 3px; }
     
-    /* Tags styling */
+    /* Powerup Tags Styling */
     .tag-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 5px; min-height: 12px; }
     .p-tag { font-size: 0.55rem; font-weight: 900; padding: 2px 3px; border-radius: 2px; text-transform: uppercase; line-height: 1; }
     
     .t-tag { color: #FF8C00; border: 1px solid #FF8C00; } 
     .k-tag { color: #FF3E3E; border: 1px solid #FF3E3E; } 
     .m-tag { color: #BF00FF; border: 1px solid #BF00FF; } 
+    .camo-tag { color: #BFFF00; border: 1px solid #BFFF00; background: rgba(191, 255, 0, 0.2); }
     .me-tag { color: #00D1FF; border: 1px solid #00D1FF; background: rgba(0, 209, 255, 0.2); }
     .ld-tag { color: #00FFCC; border: 1px solid #00FFCC; background: rgba(0, 255, 204, 0.2); }
     .cp-tag { color: #FFCC00; border: 1px solid #FFCC00; background: rgba(255, 204, 0, 0.2); }
@@ -53,14 +54,12 @@ def get_database():
         ws = client.open_by_key(s["spreadsheet"].strip()).get_worksheet(0)
         data = ws.get_all_values()
         if len(data) < 2: return pd.DataFrame(), ws
-        
-        # We assume 10 columns: A(Player), B(Hole), C(Score), D(Drink), E(Camo), F(Throw), G(Kick), H(Mully), I(Me2), J(Honor)
+        # Mapping by Column Index: A, B, C, D, E, F, G, H, I, J
         df_cloud = pd.DataFrame(data[1:], columns=['player', 'hole', 'score', 'drinks', 'camo', 'throw', 'kick', 'mully', 'me2', 'honor'])
         return df_cloud, ws
     except: return pd.DataFrame(), None
 
 def get_master_df(df_cloud):
-    # Create local skeleton
     rows = []
     for h in range(1, 19):
         for p in PLAYERS:
@@ -70,17 +69,13 @@ def get_master_df(df_cloud):
     if not df_cloud.empty:
         df_cloud['player'] = df_cloud['player'].astype(str).str.strip().str.upper()
         df_cloud['hole'] = df_cloud['hole'].astype(str).str.strip()
-        
-        # Merge by position
         master = master.merge(df_cloud, on=['player', 'hole'], how='left', suffixes=('', '_c'))
-        
         cols = ['score', 'drinks', 'camo', 'throw', 'kick', 'mully', 'me2', 'honor']
         for col in cols:
             if f"{col}_c" in master.columns:
                 master[col] = master[f"{col}_c"].combine_first(master[col])
         master = master[["player", "hole"] + cols]
 
-    # Type enforcement
     master['score'] = pd.to_numeric(master['score'], errors='coerce').fillna(0).astype(int)
     master['hole'] = pd.to_numeric(master['hole']).astype(int)
     master['mully'] = pd.to_numeric(master['mully'], errors='coerce').fillna(0).astype(int)
@@ -122,6 +117,7 @@ with tab1:
             
             # Tags Logic
             tags = []
+            if is_camo: tags.append('<span class="p-tag camo-tag">C</span>')
             if str(r['throw']).upper() == "TRUE": tags.append('<span class="p-tag t-tag">T</span>')
             if str(r['kick']).upper() == "TRUE": tags.append('<span class="p-tag k-tag">K</span>')
             if int(r['mully']) > 0: tags.append('<span class="p-tag m-tag">M</span>')
@@ -153,8 +149,7 @@ with tab2:
             "Me2": "✅ USED" if me2_used else "READY",
             "Mullies": f"{int(p_df['mully'].sum())} / 2",
             "Throws": (p_df['throw'].astype(str).str.upper() == "TRUE").sum(),
-            "Kicks": (p_df['kick'].astype(str).str.upper() == "TRUE").sum(),
-            "Long Drives": (p_df['honor'].astype(str).str.upper() == "D").sum()
+            "Kicks": (p_df['kick'].astype(str).str.upper() == "TRUE").sum()
         })
     st.table(inv)
 
