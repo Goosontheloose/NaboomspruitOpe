@@ -6,7 +6,7 @@ import base64  # Required for PDF embedding
 from google.oauth2.service_account import Credentials
 
 # --- APP CONFIG ---
-st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
+st.set_page_config(page_title="Naboom Ope", layout="wide")
 
 if 'reset_id' not in st.session_state:
     st.session_state.reset_id = 0
