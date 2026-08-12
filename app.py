@@ -5,7 +5,7 @@ import os
 from google.oauth2.service_account import Credentials
 
 # --- APP CONFIG ---
-st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
+st.set_page_config(page_title="Naboomspruit Ope 2026", layout="wide")
 
 if 'reset_id' not in st.session_state:
     st.session_state.reset_id = 0
@@ -42,7 +42,7 @@ st.markdown("""
 LOCAL_LOGO = "Naboom logo Nuut.png"
 RULES_P1, RULES_P2 = "Rules1.png", "Rules2.png"
 PLAYERS = ["Bennie", "Adriaan", "Danie", "Martin", "Frederik"]
-HCP_MAP = {"BENNIE": 36, "ADRIAAN": 33, "DANIE": 33, "MARTIN": 32, "FREDERIK": 32}
+HCP_MAP = {"BENNIE": 36, "ADRIAAN": 34, "DANIE": 34, "MARTIN": 33, "FREDERIK": 33}
 COURSE_PAR = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
 COURSE_IDX = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
 
@@ -115,7 +115,7 @@ df = get_master_df(df_raw)
 df['pts'] = df.apply(lambda r: calculate_points(r['player'], r['hole'], r['score'], r['camo'], r['honor']), axis=1)
 
 # --- TABS ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🥇 STANDINGS", "🏆 SCORECARD", "🎒 ARSENAL", "🎯 COMMAND", "📜 RULES"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🥇PUNTELEER", "🏆 TELLINGBORD", "🎒 RUGSAKKIE", "🎯INLEES", "📜 REELS"])
 
 with tab1:
     rank_data = []
