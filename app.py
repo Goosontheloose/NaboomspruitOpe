@@ -189,7 +189,7 @@ with tab4:
             honor_winner = st.selectbox("Closest to Pin Winner", ["NONE"] + PLAYERS, index=0)
 
         updates = []
-        for p in PLAYERS:
+           for p in PLAYERS:
             p_row = h_data[h_data['player'] == p.upper()].iloc[0]
             strokes = get_strokes_for_hole(p, h_idx)
             st.markdown(f"**{p}** <span class='hcp-badge'>+{strokes} Strokes</span>", unsafe_allow_html=True)
@@ -199,15 +199,16 @@ with tab4:
                 p_honor = "D" if COURSE_PAR[h_idx-1] == 5 else "C"
 
             c = st.columns(5); rid = st.session_state.reset_id
-            s = c[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s_{p}_{rid}")
-            d = c[1].number_input("Drink", 0, 10, int(p_row['drinks']), key=f"d_{p}_{rid}")
-            mu = c[2].number_input("Mully", 0, 1, int(p_row['mully']), key=f"mu_{p}_{rid}")
-            ca = c[3].checkbox("Camo", str(p_row['camo']).upper() == "TRUE", key=f"ca_{p}_{rid}")
-            me = c[4].checkbox("Me2", str(p_row['me2']).upper() == "TRUE", key=f"me_{p}_{rid}")
+            # ADDED h_idx to all keys below to prevent stale data between holes
+            s = c[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s_{h_idx}_{p}_{rid}")
+            d = c[1].number_input("Drink", 0, 10, int(p_row['drinks']), key=f"d_{h_idx}_{p}_{rid}")
+            mu = c[2].number_input("Mully", 0, 1, int(p_row['mully']), key=f"mu_{h_idx}_{p}_{rid}")
+            ca = c[3].checkbox("Camo", str(p_row['camo']).upper() == "TRUE", key=f"ca_{h_idx}_{p}_{rid}")
+            me = c[4].checkbox("Me2", str(p_row['me2']).upper() == "TRUE", key=f"me_{h_idx}_{p}_{rid}")
             
             c2 = st.columns(2)
-            th = c2[0].checkbox("Throw", str(p_row['throw']).upper() == "TRUE", key=f"th_{p}_{rid}")
-            ki = c2[1].checkbox("Kick", str(p_row['kick']).upper() == "TRUE", key=f"ki_{p}_{rid}")
+            th = c2[0].checkbox("Throw", str(p_row['throw']).upper() == "TRUE", key=f"th_{h_idx}_{p}_{rid}")
+            ki = c2[1].checkbox("Kick", str(p_row['kick']).upper() == "TRUE", key=f"ki_{h_idx}_{p}_{rid}")
             
             updates.append([p, str(h_idx), str(s), str(d), str(ca).upper(), str(th).upper(), str(ki).upper(), str(mu), str(me).upper(), p_honor])
             
