@@ -2,77 +2,49 @@ import streamlit as st
 import pandas as pd
 import gspread
 import os
-import base64  # Required for PDF embedding
 from google.oauth2.service_account import Credentials
 
 # --- APP CONFIG ---
-st.set_page_config(page_title="Naboom Ope", layout="wide")
+st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
 
 if 'reset_id' not in st.session_state:
     st.session_state.reset_id = 0
 
-# --- CSS (ALL FEATURES PRESERVED) ---
+# --- UI STYLING (PRESERVED) ---
 st.markdown("""
     <style>
-    .main-title { 
-        color: #BFFF00; 
-        font-size: 2.2rem; 
-        font-weight: 800; 
-        text-transform: uppercase; 
-        text-align: center;
-        margin-top: 10px; 
-        margin-bottom: 20px;
-        letter-spacing: 2px; 
-    }
-    
+    .main-title { color: #BFFF00; font-size: 2.2rem; font-weight: 800; text-transform: uppercase; text-align: center; margin-top: 10px; margin-bottom: 20px; letter-spacing: 2px; }
     .rank-table { width: 100%; border-collapse: collapse; margin-top: 20px; background-color: #0F0F0F; }
     .rank-table th { background-color: #1A1A1A; color: #BFFF00; padding: 15px; text-align: left; border-bottom: 2px solid #333; text-transform: uppercase; font-size: 0.9rem; }
     .rank-table td { padding: 15px; border-bottom: 1px solid #222; color: #EEE; font-size: 1.1rem; }
     .rank-1 { color: #FFD700; font-weight: bold; border-left: 5px solid #FFD700; }
     .pts-highlight { color: #BFFF00; font-weight: 800; font-size: 1.3rem; }
     .gimme-highlight { color: #00D1FF; font-family: monospace; }
-
     .scroll-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .sc-table { min-width: 850px; border-collapse: collapse; background-color: #0F0F0F; color: #EEE; font-size: 0.75rem; table-layout: fixed; }
     .sc-table th, .sc-table td { border: 1px solid #333; padding: 8px 2px; text-align: center; vertical-align: middle; }
     .sc-table th { background-color: #1A1A1A; color: #BFFF00; font-size: 0.6rem; }
-    
     .player-cell { text-align: left !important; font-weight: bold; background: #151515; padding-left: 8px !important; width: 95px !important; color: #FFF; border-left: 4px solid #BFFF00 !important; }
     .score-val { font-size: 0.9rem; font-weight: 700; color: #FFF; }
     .pts-val { font-size: 0.85rem; font-weight: 800; color: #BFFF00; }
-    
     .tag-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 5px; min-height: 12px; }
     .p-tag { font-size: 0.55rem; font-weight: 900; padding: 2px 3px; border-radius: 2px; text-transform: uppercase; line-height: 1; border: 1px solid; }
-    
     .t-tag { color: #FF8C00; } .k-tag { color: #FF3E3E; } .m-tag { color: #BF00FF; } 
     .me-tag { color: #00D1FF; background: rgba(0, 209, 255, 0.2); }
     .ld-tag { color: #00FFCC; } .cp-tag { color: #FFCC00; }
-    
     .camo-active { background-color: #1E2B00 !important; border: 1px solid #BFFF00 !important; }
     .total-box { background: #1A1A1A; font-weight: bold; font-size: 0.9rem; }
-    
     .hcp-badge { background: #1A1A1A; color: #BFFF00; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; border: 1px solid #333; margin-left: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- CONSTANTS ---
 LOCAL_LOGO = "Naboom logo Nuut.png"
-LOCAL_PDF = "Reels.pdf"  # <--- RENAME YOUR PDF TO THIS OR CHANGE THIS NAME
+RULES_P1, RULES_P2 = "Rules1.png", "Rules2.png"
 PLAYERS = ["Bennie", "Adriaan", "Danie", "Martin", "Frederik"]
-HCP_MAP = {"BENNIE": 36, "ADRIAAN": 34, "DANIE": 34, "MARTIN": 33, "FREDERIK": 33}
+HCP_MAP = {"BENNIE": 36, "ADRIAAN": 33, "DANIE": 33, "MARTIN": 32, "FREDERIK": 32}
 COURSE_PAR = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
 COURSE_IDX = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
-
-# --- PDF DISPLAY FUNCTION ---
-def display_pdf(file_path):
-    if os.path.exists(file_path):
-        with open(file_path, "rb") as f:
-            base64_pdf = base64.b64encode(f.read()).decode('utf-8')
-        # PDF embedding in an iframe (Height 1000px to show 2 pages easily)
-        pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="1000" type="application/pdf"></iframe>'
-        st.markdown(pdf_display, unsafe_allow_html=True)
-    else:
-        st.error(f"PDF file '{file_path}' not found in folder.")
 
 # --- DATABASE ENGINE ---
 def get_database():
@@ -98,8 +70,7 @@ def get_master_df(df_cloud):
         df_cloud['hole'] = df_cloud['hole'].astype(str).str.strip()
         master = master.merge(df_cloud, on=['player', 'hole'], how='left', suffixes=('', '_c'))
         for col in ['score', 'drinks', 'camo', 'throw', 'kick', 'mully', 'me2', 'honor']:
-            if f"{col}_c" in master.columns:
-                master[col] = master[f"{col}_c"].combine_first(master[col])
+            if f"{col}_c" in master.columns: master[col] = master[f"{col}_c"].combine_first(master[col])
         master = master[["player", "hole", 'score', 'drinks', 'camo', 'throw', 'kick', 'mully', 'me2', 'honor']]
     master['score'] = pd.to_numeric(master['score'], errors='coerce').fillna(0).astype(int)
     master['drinks'] = pd.to_numeric(master['drinks'], errors='coerce').fillna(0).astype(int)
@@ -108,34 +79,43 @@ def get_master_df(df_cloud):
     master['player_disp'] = master['player'].map({p.upper(): p for p in PLAYERS})
     return master
 
-def get_strokes_for_hole(player_name, hole_num):
-    hcp = HCP_MAP.get(player_name.upper(), 0)
-    idx = COURSE_IDX[hole_num - 1]
+def get_strokes_for_hole(p_name, h_num):
+    hcp = HCP_MAP.get(p_name.upper(), 0)
+    idx = COURSE_IDX[h_num - 1]
     return (hcp // 18) + (1 if idx <= (hcp % 18) else 0)
 
-def calculate_points(p_name, h_num, score, camo):
+def calculate_points(p_name, h_num, score, camo, honor):
     if score <= 0: return 0
     par = COURSE_PAR[h_num - 1]
     strokes = get_strokes_for_hole(p_name, h_num)
     net = score - strokes
+    
+    # 1. Base Stableford Points
     pts = max(0, 2 - (net - par))
-    if pts > 0 and par in [3, 5]: pts += 1 
-    return pts * 2 if str(camo).upper() == "TRUE" else pts
+    
+    # 2. Camo Ball Multiplier (ONLY on golf points)
+    if str(camo).upper() == "TRUE":
+        pts = pts * 2
+        
+    # 3. Add Bonus Point (AFTER doubling)
+    if str(honor).upper() in ['D', 'C']:
+        pts += 1
+        
+    return pts
 
-# --- HEADER (CENTERED) ---
+# --- HEADER ---
 _, mid, _ = st.columns([1, 0.6, 1])
 with mid:
-    if os.path.exists(LOCAL_LOGO):
-        st.image(LOCAL_LOGO, use_container_width=True)
+    if os.path.exists(LOCAL_LOGO): st.image(LOCAL_LOGO, use_container_width=True)
 st.markdown('<div class="main-title">Naboom Nuut: Tactical Open</div>', unsafe_allow_html=True)
 
 # --- DATA PROCESSING ---
 df_raw, worksheet = get_database()
 df = get_master_df(df_raw)
-df['pts'] = df.apply(lambda r: calculate_points(r['player'], r['hole'], r['score'], r['camo']), axis=1)
+df['pts'] = df.apply(lambda r: calculate_points(r['player'], r['hole'], r['score'], r['camo'], r['honor']), axis=1)
 
-# --- TABS (NOW WITH RULES TAB) ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🥇 STANDINGS", "🏆 SCORECARD", "🎒 RUGSAK", "🎯 SCORES", "📜 RULES"])
+# --- TABS ---
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🥇 STANDINGS", "🏆 SCORECARD", "🎒 ARSENAL", "🎯 COMMAND", "📜 RULES"])
 
 with tab1:
     rank_data = []
@@ -144,10 +124,10 @@ with tab1:
         rank_data.append({"Player": p, "Points": p_df['pts'].sum(), "Gimme": p_df['drinks'].sum() * 10})
     lb = pd.DataFrame(rank_data).sort_values(by="Points", ascending=False).reset_index(drop=True)
     lb.index += 1
-    html = '<table class="rank-table"><tr><th>Rank</th><th>Player</th><th>Total Points</th><th>Gimme Distance</th></tr>'
+    html = '<table class="rank-table"><tr><th>Rank</th><th>Player</th><th>Points</th><th>Gimme</th></tr>'
     for i, row in lb.iterrows():
         r_class = "rank-1" if i == 1 else ""
-        html += f'<tr class="{r_class}"><td>{i}</td><td style="font-weight:bold;">{row["Player"]}</td><td class="pts-highlight">{int(row["Points"])}</td><td class="gimme-highlight">📏 {int(row["Gimme"])} cm</td></tr>'
+        html += f'<tr class="{r_class}"><td>{i}</td><td style="font-weight:bold;">{row["Player"]}</td><td class="pts-highlight">{int(row["Points"])}</td><td class="gimme-highlight">{int(row["Gimme"])} cm</td></tr>'
     st.markdown(html + "</table>", unsafe_allow_html=True)
 
 with tab2:
@@ -181,15 +161,15 @@ with tab3:
             "Player": p, "Gimme": f"📏 {int(p_df['drinks'].sum()) * 10} cm",
             "Camo Balls": f"Used {(p_df['camo'].astype(str).str.upper() == 'TRUE').sum()} / 2",
             "Me2": "✅ USED" if (p_df['me2'].astype(str).str.upper() == "TRUE").any() else "READY",
-            "Muligans": f"{int(p_df['mully'].sum())} / 2",
-            "Gooi": (p_df['throw'].astype(str).str.upper() == "TRUE").sum(),
-            "Footwedge": (p_df['kick'].astype(str).str.upper() == "TRUE").sum()
+            "Mullies": f"{int(p_df['mully'].sum())} / 2",
+            "Throws": (p_df['throw'].astype(str).str.upper() == "TRUE").sum(),
+            "Kicks": (p_df['kick'].astype(str).str.upper() == "TRUE").sum()
         })
     st.table(inv)
 
 with tab4:
     h_idx = st.selectbox("Select Hole", range(1, 19))
-    if st.button("🚨 CLEAR EVERYTHING FOR THIS HOLE", use_container_width=True):
+    if st.button("🚨 CLEAR HOLE DATA", use_container_width=True):
         if worksheet:
             reset_data = [[p, str(h_idx), "0", "0", "FALSE", "FALSE", "FALSE", "0", "FALSE", "NONE"] for p in PLAYERS]
             start_row = ((h_idx-1)*5)+2
@@ -198,26 +178,39 @@ with tab4:
             st.rerun()
 
     h_data = df[df['hole'] == h_idx]
-    with st.form(f"entry_v{h_idx}_{st.session_state.reset_id}"):
+    with st.form(f"f_{h_idx}_{st.session_state.reset_id}"):
         st.info(f"Hole {h_idx} | Par {COURSE_PAR[h_idx-1]}")
+        
+        # SINGLE SELECTOR FOR HONORS (LD/CP)
+        honor_winner = "NONE"
+        if COURSE_PAR[h_idx-1] == 5:
+            honor_winner = st.selectbox("Longest Drive Winner", ["NONE"] + PLAYERS, index=0)
+        elif COURSE_PAR[h_idx-1] == 3:
+            honor_winner = st.selectbox("Closest to Pin Winner", ["NONE"] + PLAYERS, index=0)
+
         updates = []
         for p in PLAYERS:
             p_row = h_data[h_data['player'] == p.upper()].iloc[0]
             strokes = get_strokes_for_hole(p, h_idx)
             st.markdown(f"**{p}** <span class='hcp-badge'>+{strokes} Strokes</span>", unsafe_allow_html=True)
+            
+            p_honor = "NONE"
+            if honor_winner == p:
+                p_honor = "D" if COURSE_PAR[h_idx-1] == 5 else "C"
+
             c = st.columns(5); rid = st.session_state.reset_id
             s = c[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s_{p}_{rid}")
             d = c[1].number_input("Drink", 0, 10, int(p_row['drinks']), key=f"d_{p}_{rid}")
             mu = c[2].number_input("Mully", 0, 1, int(p_row['mully']), key=f"mu_{p}_{rid}")
             ca = c[3].checkbox("Camo", str(p_row['camo']).upper() == "TRUE", key=f"ca_{p}_{rid}")
             me = c[4].checkbox("Me2", str(p_row['me2']).upper() == "TRUE", key=f"me_{p}_{rid}")
-            c2 = st.columns(3)
+            
+            c2 = st.columns(2)
             th = c2[0].checkbox("Throw", str(p_row['throw']).upper() == "TRUE", key=f"th_{p}_{rid}")
             ki = c2[1].checkbox("Kick", str(p_row['kick']).upper() == "TRUE", key=f"ki_{p}_{rid}")
-            h_v = "NONE"
-            if COURSE_PAR[h_idx-1] == 5 and c2[2].checkbox("LD", str(p_row['honor']).upper() == "D", key=f"ld_{p}_{rid}"): h_v = "D"
-            if COURSE_PAR[h_idx-1] == 3 and c2[2].checkbox("CP", str(p_row['honor']).upper() == "C", key=f"cp_{p}_{rid}"): h_v = "C"
-            updates.append([p, str(h_idx), str(s), str(d), str(ca).upper(), str(th).upper(), str(ki).upper(), str(mu), str(me).upper(), h_v])
+            
+            updates.append([p, str(h_idx), str(s), str(d), str(ca).upper(), str(th).upper(), str(ki).upper(), str(mu), str(me).upper(), p_honor])
+            
         if st.form_submit_button("SAVE HOLE DATA", use_container_width=True):
             if worksheet:
                 start_row = ((h_idx-1)*5)+2
@@ -226,4 +219,5 @@ with tab4:
 
 with tab5:
     st.subheader("Tournament Guidelines")
-    display_pdf(LOCAL_PDF)
+    if os.path.exists(RULES_P1): st.image(RULES_P1, use_container_width=True)
+    if os.path.exists(RULES_P2): st.image(RULES_P2, use_container_width=True)
