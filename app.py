@@ -59,7 +59,7 @@ st.markdown("""
 LOCAL_LOGO = "Naboom logo Nuut.png"
 LOCAL_PDF = "Reels.pdf"  # <--- RENAME YOUR PDF TO THIS OR CHANGE THIS NAME
 PLAYERS = ["Bennie", "Adriaan", "Danie", "Martin", "Frederik"]
-HCP_MAP = {"BENNIE": 36, "ADRIAAN": 33, "DANIE": 33, "MARTIN": 32, "FREDERIK": 32}
+HCP_MAP = {"BENNIE": 36, "ADRIAAN": 34, "DANIE": 34, "MARTIN": 33, "FREDERIK": 33}
 COURSE_PAR = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
 COURSE_IDX = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
 
