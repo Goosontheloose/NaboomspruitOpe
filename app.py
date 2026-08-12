@@ -5,12 +5,12 @@ import os
 from google.oauth2.service_account import Credentials
 
 # --- APP CONFIG ---
-st.set_page_config(page_title="Naboomspruit Ope 2026", layout="wide")
+st.set_page_config(page_title="Naboom Nuut: Tactical Open", layout="wide")
 
 if 'reset_id' not in st.session_state:
     st.session_state.reset_id = 0
 
-# --- UI STYLING (PRESERVED) ---
+# --- UI STYLING ---
 st.markdown("""
     <style>
     .main-title { color: #BFFF00; font-size: 2.2rem; font-weight: 800; text-transform: uppercase; text-align: center; margin-top: 10px; margin-bottom: 20px; letter-spacing: 2px; }
@@ -31,7 +31,8 @@ st.markdown("""
     .p-tag { font-size: 0.55rem; font-weight: 900; padding: 2px 3px; border-radius: 2px; text-transform: uppercase; line-height: 1; border: 1px solid; }
     .t-tag { color: #FF8C00; } .k-tag { color: #FF3E3E; } .m-tag { color: #BF00FF; } 
     .me-tag { color: #00D1FF; background: rgba(0, 209, 255, 0.2); }
-    .ld-tag { color: #00FFCC; } .cp-tag { color: #FFCC00; }
+    .ld-tag { color: #00FFCC; border-color: #00FFCC; }
+    .cp-tag { color: #FFCC00; border-color: #FFCC00; }
     .camo-active { background-color: #1E2B00 !important; border: 1px solid #BFFF00 !important; }
     .total-box { background: #1A1A1A; font-weight: bold; font-size: 0.9rem; }
     .hcp-badge { background: #1A1A1A; color: #BFFF00; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; border: 1px solid #333; margin-left: 10px; }
@@ -42,7 +43,7 @@ st.markdown("""
 LOCAL_LOGO = "Naboom logo Nuut.png"
 RULES_P1, RULES_P2 = "Rules1.png", "Rules2.png"
 PLAYERS = ["Bennie", "Adriaan", "Danie", "Martin", "Frederik"]
-HCP_MAP = {"BENNIE": 36, "ADRIAAN": 34, "DANIE": 34, "MARTIN": 33, "FREDERIK": 33}
+HCP_MAP = {"BENNIE": 36, "ADRIAAN": 33, "DANIE": 33, "MARTIN": 32, "FREDERIK": 32}
 COURSE_PAR = [4, 4, 5, 3, 5, 4, 4, 3, 4, 4, 4, 5, 3, 5, 4, 4, 3, 4]
 COURSE_IDX = [17, 3, 7, 5, 9, 13, 1, 15, 11, 14, 6, 8, 18, 10, 2, 4, 16, 12]
 
@@ -89,18 +90,9 @@ def calculate_points(p_name, h_num, score, camo, honor):
     par = COURSE_PAR[h_num - 1]
     strokes = get_strokes_for_hole(p_name, h_num)
     net = score - strokes
-    
-    # 1. Base Stableford Points
     pts = max(0, 2 - (net - par))
-    
-    # 2. Camo Ball Multiplier (ONLY on golf points)
-    if str(camo).upper() == "TRUE":
-        pts = pts * 2
-        
-    # 3. Add Bonus Point (AFTER doubling)
-    if str(honor).upper() in ['D', 'C']:
-        pts += 1
-        
+    if str(camo).upper() == "TRUE": pts = pts * 2
+    if str(honor).upper() in ['D', 'C']: pts += 1
     return pts
 
 # --- HEADER ---
@@ -109,13 +101,13 @@ with mid:
     if os.path.exists(LOCAL_LOGO): st.image(LOCAL_LOGO, use_container_width=True)
 st.markdown('<div class="main-title">Naboom Nuut: Tactical Open</div>', unsafe_allow_html=True)
 
-# --- DATA PROCESSING ---
+# --- DATA ---
 df_raw, worksheet = get_database()
 df = get_master_df(df_raw)
 df['pts'] = df.apply(lambda r: calculate_points(r['player'], r['hole'], r['score'], r['camo'], r['honor']), axis=1)
 
 # --- TABS ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🥇PUNTELEER", "🏆 TELLINGBORD", "🎒 RUGSAKKIE", "🎯INLEES", "📜 REELS"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🥇 STANDINGS", "🏆 SCORECARD", "🎒 ARSENAL", "🎯 COMMAND", "📜 RULES"])
 
 with tab1:
     rank_data = []
@@ -180,32 +172,36 @@ with tab4:
     h_data = df[df['hole'] == h_idx]
     with st.form(f"f_{h_idx}_{st.session_state.reset_id}"):
         st.info(f"Hole {h_idx} | Par {COURSE_PAR[h_idx-1]}")
+        current_winner = "NONE"
+        existing_honor = h_data[h_data['honor'].isin(['D', 'C'])]
+        if not existing_honor.empty: current_winner = existing_honor.iloc[0]['player_disp']
         
-        # SINGLE SELECTOR FOR HONORS (LD/CP)
+        honor_list = ["NONE"] + PLAYERS
+        try: start_idx = honor_list.index(current_winner)
+        except: start_idx = 0
+
         honor_winner = "NONE"
         if COURSE_PAR[h_idx-1] == 5:
-            honor_winner = st.selectbox("Longest Drive Winner", ["NONE"] + PLAYERS, index=0)
+            honor_winner = st.selectbox("Longest Drive Winner (LD)", honor_list, index=start_idx)
         elif COURSE_PAR[h_idx-1] == 3:
-            honor_winner = st.selectbox("Closest to Pin Winner", ["NONE"] + PLAYERS, index=0)
+            honor_winner = st.selectbox("Closest to Pin Winner (CP)", honor_list, index=start_idx)
 
         updates = []
-           for p in PLAYERS:
+        for p in PLAYERS:
             p_row = h_data[h_data['player'] == p.upper()].iloc[0]
             strokes = get_strokes_for_hole(p, h_idx)
             st.markdown(f"**{p}** <span class='hcp-badge'>+{strokes} Strokes</span>", unsafe_allow_html=True)
             
             p_honor = "NONE"
-            if honor_winner == p:
-                p_honor = "D" if COURSE_PAR[h_idx-1] == 5 else "C"
+            if honor_winner == p: p_honor = "D" if COURSE_PAR[h_idx-1] == 5 else "C"
 
             c = st.columns(5); rid = st.session_state.reset_id
-            # ADDED h_idx to all keys below to prevent stale data between holes
+            # UNIQUE KEYS WITH HOLE INDEX
             s = c[0].number_input("Score", 0, 15, int(p_row['score']), key=f"s_{h_idx}_{p}_{rid}")
             d = c[1].number_input("Drink", 0, 10, int(p_row['drinks']), key=f"d_{h_idx}_{p}_{rid}")
             mu = c[2].number_input("Mully", 0, 1, int(p_row['mully']), key=f"mu_{h_idx}_{p}_{rid}")
             ca = c[3].checkbox("Camo", str(p_row['camo']).upper() == "TRUE", key=f"ca_{h_idx}_{p}_{rid}")
             me = c[4].checkbox("Me2", str(p_row['me2']).upper() == "TRUE", key=f"me_{h_idx}_{p}_{rid}")
-            
             c2 = st.columns(2)
             th = c2[0].checkbox("Throw", str(p_row['throw']).upper() == "TRUE", key=f"th_{h_idx}_{p}_{rid}")
             ki = c2[1].checkbox("Kick", str(p_row['kick']).upper() == "TRUE", key=f"ki_{h_idx}_{p}_{rid}")
