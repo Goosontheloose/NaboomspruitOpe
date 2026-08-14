@@ -214,7 +214,29 @@ with tab4:
                 worksheet.update(range_name=f"A{start_row}:J{start_row+4}", values=updates)
                 st.success("Synced!"); st.rerun()
 
+import base64
+
 with tab5:
-    st.subheader("Tournament Guidelines")
-    if os.path.exists(RULES_P1): st.image(RULES_P1, use_container_width=True)
-    if os.path.exists(RULES_P2): st.image(RULES_P2, use_container_width=True)
+    st.subheader("Tournament Rules")
+
+    pdf_file = "Reels.pdf"
+
+    if os.path.exists(pdf_file):
+        with open(pdf_file, "rb") as f:
+            pdf_bytes = f.read()
+
+        base64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
+
+        pdf_display = f"""
+        <iframe
+            src="data:application/pdf;base64,{base64_pdf}"
+            width="100%"
+            height="900"
+            type="application/pdf">
+        </iframe>
+        """
+
+        st.markdown(pdf_display, unsafe_allow_html=True)
+
+    else:
+        st.error("Reels.pdf not found")
