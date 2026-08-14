@@ -99,7 +99,7 @@ def calculate_points(p_name, h_num, score, camo, honor):
 _, mid, _ = st.columns([1, 0.6, 1])
 with mid:
     if os.path.exists(LOCAL_LOGO): st.image(LOCAL_LOGO, use_container_width=True)
-st.markdown('<div class="main-title">Naboom Nuut: Tactical Open</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">Naboomspruit Ope 2026</div>', unsafe_allow_html=True)
 
 # --- DATA ---
 df_raw, worksheet = get_database()
